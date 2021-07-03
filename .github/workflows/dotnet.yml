@@ -27,3 +27,11 @@ jobs:
       with:
         name: ReadinessTool.exe
         path: D:\a\IRTlibReadiness\IRTlibReadiness\IRTlibReadiness\bin\Debug\netcoreapp3.1\win-x64\publish\  
+    - uses: "marvinpinto/action-automatic-releases@latest"
+      with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
+          prerelease: true
+          title: "IRTlibReadiness Console Application"
+          files: |
+            *.exe
