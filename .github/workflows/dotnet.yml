@@ -22,3 +22,8 @@ jobs:
       run: dotnet test --no-build --verbosity normal
     - name: Publish
       run: dotnet publish
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: ReadinessTool.exe
+        path: D:\a\IRTlibReadiness\IRTlibReadiness\IRTlibReadiness\bin\Debug\netcoreapp3.1\win-x64\publish\  
