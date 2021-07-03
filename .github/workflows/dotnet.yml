@@ -34,4 +34,4 @@ jobs:
           prerelease: true
           title: "IRTlibReadiness Console Application"
           files: |
-            *.exe
+            D:\a\IRTlibReadiness\IRTlibReadiness\IRTlibReadiness\bin\Debug\netcoreapp3.1\win-x64\publish\ReadinessTool.exe
