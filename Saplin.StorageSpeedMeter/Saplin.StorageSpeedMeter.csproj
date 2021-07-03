@@ -1,0 +1,40 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Version>1.1.4</Version>
+    <ReleaseVersion>2.0.1</ReleaseVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="out_osx64\**" />
+    <Compile Remove="out_osx_min\**" />
+    <Compile Remove="out_w32\**" />
+    <Compile Remove="out_w64\**" />
+    <Compile Remove="out_win_min\**" />
+    <EmbeddedResource Remove="out_osx64\**" />
+    <EmbeddedResource Remove="out_osx_min\**" />
+    <EmbeddedResource Remove="out_w32\**" />
+    <EmbeddedResource Remove="out_w64\**" />
+    <EmbeddedResource Remove="out_win_min\**" />
+    <None Remove="out_osx64\**" />
+    <None Remove="out_osx_min\**" />
+    <None Remove="out_w32\**" />
+    <None Remove="out_w64\**" />
+    <None Remove="out_win_min\**" />
+    <None Remove=".gitignore" />
+    <None Remove=".DS_Store" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mono.Posix.NETStandard" Version="5.20.1-preview" />
+  </ItemGroup>
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="$(ConfigurationName) == Release">
+    <Copy SourceFiles="$(TargetDir)\Saplin.StorageSpeedMeter.dll" DestinationFolder="$(SolutionDir)\..\CrossPlatformDiskTest.git\References\" OverwriteReadOnlyFiles="true" />
+    <Copy SourceFiles="$(TargetDir)\Saplin.StorageSpeedMeter.dll" DestinationFolder="$(SolutionDir)\..\CPDT.Extra.git\References\" OverwriteReadOnlyFiles="true" />
+  </Target>
+</Project>
