@@ -42,7 +42,8 @@ namespace ReadinessTool
         #endregion
 
         #region GRAPHICS
-        public bool MinimalScreenSize { get; set; }
+        public bool MinimalScreenSizeCheck { get; set; }
+        public string MinimalScreenSize { get; set; }
         public int NumberOfMonitors { get; set; }
         public List<string> MonitorDetails { get; set; }
 
@@ -179,7 +180,8 @@ namespace ReadinessTool
             #endregion
 
             #region GRAPHICS
-            MinimalScreenSize = false;
+            MinimalScreenSizeCheck = false;
+            MinimalScreenSize = "";
             NumberOfMonitors = 0;
             MonitorDetails = new List<string>();
             #endregion
@@ -223,7 +225,7 @@ namespace ReadinessTool
                 _ret += "   " + s + "\n";
             _ret += "\n";
 
-            _ret += String.Format("- Displays: {0} device(s) (Minimal Size: {1})\n", this.MonitorDetails.Count, this.MinimalScreenSize);
+            _ret += String.Format("- Displays: {0} device(s) (Minimal Size: {1} - {2})\n", this.MonitorDetails.Count, this.MinimalScreenSize, this.MinimalScreenSizeCheck);
             foreach (var s in this.MonitorDetails)
                 _ret += "   " + s + "\n";
             _ret += "\n"; 

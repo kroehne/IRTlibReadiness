@@ -158,7 +158,8 @@ namespace ReadinessTool
                 #region GRAPHIC
                 try
                 {
-                    info.MinimalScreenSize = false;
+                    info.MinimalScreenSizeCheck = false;
+                    info.MinimalScreenSize = String.Format("{0}x{1}", MinimalWidth, MinimalHeight);
                     var gr = Display.GetGraphicsAdapters();
                     foreach (var g in gr)
                     {
@@ -174,13 +175,13 @@ namespace ReadinessTool
                         info.MonitorDetails.Add(String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState));
 
                         if (_mode.dmPelsWidth >= MinimalWidth && _mode.dmPelsHeight >= MinimalHeight)
-                            info.MinimalScreenSize = true;
+                            info.MinimalScreenSizeCheck = true;
                     }
 
                     if (!Silent)
                     {
                         Console.ForegroundColor = ConsoleColor.White;
-                        Console.WriteLine(" - Displays: {0} device(s) (Minimal Size: {1}) ", info.MonitorDetails.Count, info.MinimalScreenSize);
+                        Console.WriteLine(" - Displays: {0} device(s) (Minimal Size: {1} - {2}) ", info.MonitorDetails.Count, info.MinimalScreenSize, info.MinimalScreenSizeCheck);
                         if (Verbose)
                         {
                             foreach (var s in info.MonitorDetails)
@@ -546,7 +547,7 @@ namespace ReadinessTool
                         if (!Silent)
                         {
                             Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine(" - Registry: Check {0} keys/value-pairs", info.RegistryDetails.Count);
+                            Console.WriteLine(" - Registry: Checked {0} keys/value-pairs (see output for details)", info.RegistryDetails.Count);
 
                             if (Verbose)
                             {
