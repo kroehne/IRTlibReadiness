@@ -7,6 +7,23 @@ namespace ReadinessTool
 {
     public class SystemInfo
     {
+        #region JOB
+        public bool DoDriveSpeedTest = true;
+        public bool DoAudioCheck = true;
+        public bool DoPortScan = true;
+        public bool DoApplicationStartAfterCheck = true;
+        public bool DoApplicationStartBeforeCheck = false;
+
+        public int StartScanMin = 8001;
+        public int RequiredNumberOfPorts = 2;
+        public int NumberOfPortsToCheck = 1000;
+        public int MinimalWidth = 1024;
+        public int MinimalHeight = 768;
+
+        public string AppName = "TestApp.Player.Chromely.exe";
+        public string AppFolder = "";
+        #endregion
+
         #region SYSTEM
         public string MachineName { get; set; }
         public string HostName { get; set; }
@@ -57,7 +74,6 @@ namespace ReadinessTool
         #endregion
 
         #region NETWORK
-        public int RequiredNumberOfPorts { get; set; }
         public List<long> UsedPorts { get; set; }
         public List<long> FreePorts { get; set; }
 
@@ -90,7 +106,12 @@ namespace ReadinessTool
         #region REGISTRY
         public List<string> RegistryDetails { get; set; }
         #endregion
-     
+
+        #region PLAYER
+        public bool PlayerAvailable { get; set; }
+        public bool PlayerStarted { get; set; }
+        #endregion
+
         #region Touch helper
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern int GetSystemMetrics(int nIndex);
@@ -205,6 +226,11 @@ namespace ReadinessTool
 
             #endregion
 
+            #region PLAYER
+            PlayerAvailable = false;
+            PlayerStarted = false;
+            #endregion
+
         }
 
         public override string ToString()
@@ -225,11 +251,14 @@ namespace ReadinessTool
                 _ret += "   " + s + "\n";
             _ret += "\n";
 
-            _ret += String.Format("- Displays: {0} device(s) (Minimal Size: {1} - {2})\n", this.MonitorDetails.Count, this.MinimalScreenSize, this.MinimalScreenSizeCheck);
-            foreach (var s in this.MonitorDetails)
-                _ret += "   " + s + "\n";
-            _ret += "\n"; 
-            
+            if (this.DoAudioCheck)
+            {
+                _ret += String.Format("- Displays: {0} device(s) (Minimal Size: {1} - {2})\n", this.MonitorDetails.Count, this.MinimalScreenSize, this.MinimalScreenSizeCheck);
+                foreach (var s in this.MonitorDetails)
+                    _ret += "   " + s + "\n";
+                _ret += "\n";
+            }
+
             _ret += String.Format("- Audio: {0} device(s) (Test: {1})\n", this.NumberOfAudioDevices, this.PlayTestSuccess);
             foreach (var s in this.AudioDetails)
                 _ret += "   " + s + "\n";
@@ -241,9 +270,12 @@ namespace ReadinessTool
             _ret += String.Format("  " + string.Join(",", this.UsedPorts));
             _ret += "\n\n";
 
-            _ret += String.Format("- Check open TCP/IP ports: >= {0} of {1} ports available\n", this.FreePorts.Count, this.RequiredNumberOfPorts);
-            _ret += String.Format("  " + string.Join(",", this.FreePorts));
-            _ret += "\n\n";
+            if (this.DoPortScan)
+            {
+                _ret += String.Format("- Check open TCP/IP ports: >= {0} of {1} ports available\n", this.FreePorts.Count, this.RequiredNumberOfPorts);
+                _ret += String.Format("  " + string.Join(",", this.FreePorts));
+                _ret += "\n\n";
+            }
 
             _ret += String.Format("- Registry: Check {0} keys/value-pairs\n", this.RegistryDetails.Count);
             foreach (var s in this.RegistryDetails)
@@ -254,10 +286,17 @@ namespace ReadinessTool
             _ret += String.Format("- Executable: {0} (Root drive: {1}, Write Access: {2}, Free Bytes: {3})\n", this.Executable, this.RootDrive, this.WriteAccessRoot, this.CurrentDriveFreeBytes);
             _ret += "\n";
 
-            _ret += String.Format("- Drive Speed: Read {0:0.00} MB/s, Write {0:0.00} MB/s\n", this.ReadScore, this.WriteScore);
-            foreach (var s in this.SpeedDetails)
-                _ret += "   " + s + "\n";
+            if (this.DoDriveSpeedTest)
+            { 
+                _ret += String.Format("- Drive Speed: Read {0:0.00} MB/s, Write {0:0.00} MB/s\n", this.ReadScore, this.WriteScore);
+                foreach (var s in this.SpeedDetails)
+                    _ret += "   " + s + "\n";
+                _ret += "\n";
+            }
+
+            _ret += String.Format("- Player (Found Application: {0}, Started: {1})\n", this.PlayerAvailable, this.PlayerStarted);
             _ret += "\n";
+            _ret += "EOF.";
 
             return _ret;
         }

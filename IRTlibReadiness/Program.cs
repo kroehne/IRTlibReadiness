@@ -1,4 +1,5 @@
-﻿using Microsoft.Win32;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Win32;
 using NAudio.Midi;
 using Saplin.StorageSpeedMeter;
 using System;
@@ -27,41 +28,235 @@ namespace ReadinessTool
         {
             bool Silent = false;
             bool Verbose = false;
-
-            bool DriveSpeedTest = true;
-            bool CheckAUdio = true;
-            bool CheckPorts = true; 
-            
-            int StartScanMin = 9000;
-            int RequiredNumberOfPorts = 2;
-            int NumberOfPortsToCheck = 20;
-            int MinimalWidth = 1024;
-            int MinimalHeight = 768;
-
+             
             List<string> RegistryKeys = new List<string>() { @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation" };
 
             SystemInfo info = new SystemInfo()
             {
                 TotalRam = (double)RamDiskUtil.TotalRam,
                 FreeRam = (double)RamDiskUtil.FreeRam,
-                RequiredNumberOfPorts = RequiredNumberOfPorts
+                DoDriveSpeedTest = args.Length == 0,
+                DoPortScan = args.Length == 0,
+                DoApplicationStartAfterCheck = args.Length != 0
             };
 
+            info.AppFolder = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
+
+            #region Command Line 
+            var Configuration = new ConfigurationBuilder()
+               .AddCommandLine(args)
+               .Build();
+
             try
+            { 
+                if (args.Length > 0)
+                { 
+                    if (Configuration["ReadinessStartPlayer"] != null)
+                    {
+                        if (Configuration["ReadinessStartPlayer"].ToString().ToLower() == "startbefore")
+                        {
+                            info.DoApplicationStartAfterCheck = false;
+                            info.DoApplicationStartBeforeCheck = true;
+                        }
+                        else if (Configuration["ReadinessStartPlayer"].ToString().ToLower() == "startafter")
+                        {
+                            info.DoApplicationStartAfterCheck = true;
+                            info.DoApplicationStartBeforeCheck = false;
+                        }
+                        else if (Configuration["ReadinessStartPlayer"].ToString().ToLower() == "nostart")
+                        {
+                            info.DoApplicationStartAfterCheck = false;
+                            info.DoApplicationStartBeforeCheck = false;
+                        }
+                    }
+
+                    if (Configuration["ReadinessMode"] != null)
+                    {
+                        if (Configuration["ReadinessMode"].ToString().ToLower() == "silent")
+                        {
+                            Silent = true;
+                            Verbose = false;
+                        } 
+                        else if (Configuration["ReadinessMode"].ToString().ToLower() == "verbose")
+                        {
+                            Silent = false;
+                            Verbose = true;
+                        }
+                    }
+
+                    if (Configuration["ReadinessDriveSpeed"] != null)
+                    {
+                        if (Configuration["ReadinessDriveSpeed"].ToString().ToLower() == "true")
+                        {
+                            info.DoDriveSpeedTest = true;
+                        }
+                        else if (Configuration["ReadinessDriveSpeed"].ToString().ToLower() == "false")
+                        {
+                            info.DoDriveSpeedTest = false;
+                        }
+                    }
+
+                    if (Configuration["ReadinessAudio"] != null)
+                    {
+                        if (Configuration["ReadinessAudio"].ToString().ToLower() == "true")
+                        {
+                            info.DoAudioCheck = true;
+                        }
+                        else if (Configuration["ReadinessAudio"].ToString().ToLower() == "false")
+                        {
+                            info.DoAudioCheck = false;
+                        }
+                    }
+
+                    if (Configuration["ReadinessPortScan"] != null)
+                    {
+                        if (Configuration["ReadinessPortScan"].ToString().ToLower() == "true")
+                        {
+                            info.DoPortScan = true;
+                        }
+                        else if (Configuration["ReadinessPortScan"].ToString().ToLower() == "false")
+                        {
+                            info.DoPortScan = false;
+                        }
+                    }
+
+                    if (Configuration["ReadinessPortScanStart"] != null)
+                    {
+                        int _port = -1;
+                        if (int.TryParse(Configuration["ReadinessPortScanStart"].ToString(), out _port))
+                        {
+                            info.StartScanMin = _port;
+                        }
+                    }
+
+                    if (Configuration["ReadinessPortScanRequiredNumber"] != null)
+                    {
+                        int _number = 1;
+                        if (int.TryParse(Configuration["ReadinessPortScanRequiredNumber"].ToString(), out _number))
+                        {
+                            info.NumberOfPortsToCheck = _number;
+                        }
+                    }
+
+                    if (Configuration["ReadinessPortScanNumbersToCheck"] != null)
+                    {
+                        int _number = 1000;
+                        if (int.TryParse(Configuration["ReadinessPortScanNumbersToCheck"].ToString(), out _number))
+                        {
+                            info.NumberOfPortsToCheck = _number;
+                        }
+                    }
+
+                    if (Configuration["ReadinessScreenCheckWidth"] != null)
+                    {
+                        int _width = 1024;
+                        if (int.TryParse(Configuration["ReadinessScreenCheckWidth"].ToString(), out _width))
+                        {
+                            info.MinimalWidth = _width;
+                        }
+                    }
+
+                    if (Configuration["ReadinessScreenCheckHeight"] != null)
+                    {
+                        int _height = 768;
+                        if (int.TryParse(Configuration["ReadinessScreenCheckHeight"].ToString(), out _height))
+                        {
+                            info.MinimalHeight = _height;
+                        }
+                    }
+
+                    if (Configuration["ReadinessAppFolder"] != null)
+                    {
+                        info.AppFolder = Configuration["ReadinessAppFolder"].ToString();
+                    }
+
+                    if (Configuration["ReadinessAppName"] != null)
+                    {
+                        info.AppName = Configuration["ReadinessAppName"].ToString();
+                    }
+                }
+            }
+            catch (Exception e)
             {
+                Console.WriteLine("\nProcessing command line parameters failed with an unexpected error:");
+                Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                Console.WriteLine(e.StackTrace);
+            }
+
+            #endregion
+
+            try
+            { 
+                #region START PLAYER BEFORE 
+                  
+                info.PlayerAvailable = File.Exists(Path.Combine(info.AppFolder, info.AppName));
+
+                if (info.DoApplicationStartBeforeCheck)
+                {
+                    info.PlayerStarted = false;
+
+                    if (File.Exists(Path.Combine(info.AppFolder, info.AppName)))
+                    {
+                        try
+                        {
+                            var process = new Process
+                            {
+                                StartInfo = new ProcessStartInfo
+                                {
+                                    FileName = Path.Combine(info.AppFolder, info.AppName),
+                                    Arguments = string.Join(" ", args),
+                                    UseShellExecute = false,
+                                    RedirectStandardOutput = true,
+                                    CreateNoWindow = true
+                                }
+                            };
+
+                            if (process.Start())
+                            {
+                                info.PlayerStarted = true;
+                            }
+
+                            while (!process.StandardOutput.EndOfStream)
+                            {
+                                var line = process.StandardOutput.ReadLine();
+                                Console.WriteLine(line);
+                            }
+
+                            process.WaitForExit();
+                            return;
+
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("\n Lunching the player failed with an unexpected error:");
+                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                            Console.WriteLine(e.StackTrace);
+                            info.PlayerStarted = false;
+                        }
+                    }
+                  
+                }
+   
+                #endregion
+
                 #region STARTUP 
 
                 if (!Silent)
                 {
                     Console.ForegroundColor = ConsoleColor.Blue;
                     Console.WriteLine("IRTlib: Readiness-Tool ({0})\n", info.Version);
-                    Console.ResetColor();
+                    Console.ResetColor(); 
                 }
 
                 if (!Silent & Verbose)
                 {
                     Console.ForegroundColor = ConsoleColor.DarkGray;
-                    WriteLineWordWrap("This tool, developed by DIPF/TBA and Software-Driven, checks the prerequisites for running the IRTlib player. \n");
+                    WriteLineWordWrap("\n\nThis tool, developed by DIPF/TBA and Software-Driven, checks the prerequisites for running the IRTlib player. \n\n");
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    Console.WriteLine("- BaseDirectory: {0}", AppContext.BaseDirectory);
+                    Console.WriteLine("- CurrentDirectory (Directory): {0}", Directory.GetCurrentDirectory());
+                    Console.WriteLine("- CurrentDirectory (Environment): {0}", Environment.CurrentDirectory);
+                    Console.WriteLine("- CurrentProcess Folder: {0}\n", Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName));
                     Console.ResetColor();
                 }
 
@@ -159,7 +354,7 @@ namespace ReadinessTool
                 try
                 {
                     info.MinimalScreenSizeCheck = false;
-                    info.MinimalScreenSize = String.Format("{0}x{1}", MinimalWidth, MinimalHeight);
+                    info.MinimalScreenSize = String.Format("{0}x{1}", info.MinimalWidth, info.MinimalHeight);
                     var gr = Display.GetGraphicsAdapters();
                     foreach (var g in gr)
                     {
@@ -174,7 +369,7 @@ namespace ReadinessTool
                         var _mode = Display.GetDeviceMode(g.DeviceName);
                         info.MonitorDetails.Add(String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState));
 
-                        if (_mode.dmPelsWidth >= MinimalWidth && _mode.dmPelsHeight >= MinimalHeight)
+                        if (_mode.dmPelsWidth >= info.MinimalWidth && _mode.dmPelsHeight >= info.MinimalHeight)
                             info.MinimalScreenSizeCheck = true;
                     }
 
@@ -201,7 +396,7 @@ namespace ReadinessTool
 
                 #region AUDIO
 
-                if (CheckAUdio)
+                if (info.DoAudioCheck)
                 {
                     try
                     {
@@ -315,12 +510,12 @@ namespace ReadinessTool
                         }
                     }
 
-                    if (CheckPorts)
+                    if (info.DoPortScan)
                     {
-                        int _port = StartScanMin;
+                        int _port = info.StartScanMin;
                         int _i = 0;
 
-                        while (info.FreePorts.Count < RequiredNumberOfPorts & _i < NumberOfPortsToCheck)
+                        while (info.FreePorts.Count < info.RequiredNumberOfPorts & _i < info.NumberOfPortsToCheck)
                         {
                             if (!info.UsedPorts.Contains(_port))
                             {
@@ -336,7 +531,7 @@ namespace ReadinessTool
                         if (!Silent)
                         {
                             Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine(" - Check open TCP/IP ports: >= {0} of {1} ports available", info.FreePorts.Count, RequiredNumberOfPorts);
+                            Console.WriteLine(" - Check open TCP/IP ports: >= {0} of {1} ports available", info.FreePorts.Count, info.RequiredNumberOfPorts);
                             if (Verbose)
                             {
                                 Console.WriteLine("    " + string.Join(",", info.FreePorts));
@@ -396,9 +591,8 @@ namespace ReadinessTool
 
                 #region DRIVESPEED
 
-                if (DriveSpeedTest)
-                {
-                    
+                if (info.DoDriveSpeedTest)
+                { 
                     try
                     {
                         var bigTest = new BigTest(info.RootDrive, fileSize, false);
@@ -490,6 +684,7 @@ namespace ReadinessTool
                                         Console.WriteLine("  Stopping...");
                                     breakTest = true;
                                     bigTest.Break();
+                                    info.DoDriveSpeedTest = false;
                                 }
 
                                 ShowCounters(bigTest);
@@ -568,13 +763,83 @@ namespace ReadinessTool
 
                 #endregion
 
+                #region START PLAYER AFTER 
+
+                if (info.DoApplicationStartAfterCheck)
+                {
+                    info.PlayerStarted = false;
+                    if (File.Exists(Path.Combine(info.AppFolder, info.AppName)))
+                    {
+                        try
+                        {
+                            var process = new Process
+                            {
+                                StartInfo = new ProcessStartInfo
+                                {
+                                    FileName = Path.Combine(info.AppFolder, info.AppName),
+                                    Arguments = string.Join(" ", args),
+                                    UseShellExecute = false,
+                                    RedirectStandardOutput = true,
+                                    CreateNoWindow = true
+                                }
+                            };
+
+                            if (process.Start())
+                            {
+                                info.PlayerStarted = true;
+                            } 
+
+                            while (!process.StandardOutput.EndOfStream)
+                            {
+                                var line = process.StandardOutput.ReadLine();
+                                Console.WriteLine(line);
+                            }
+                             
+                            process.WaitForExit();
+                              
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("\n Lunching the player failed with an unexpected error:");
+                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                            Console.WriteLine(e.StackTrace);
+                            info.PlayerStarted = false;
+                        }
+                    }
+                    else
+                    {
+                        info.PlayerAvailable = false;
+                    }
+                }
+
+                if (!Silent)
+                {
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.WriteLine("\n - Player (Found Application: {0}, Started: {1})", info.PlayerAvailable, info.PlayerStarted);
+                    Console.ResetColor();
+                }
+
+                #endregion
+
+                #region WRITE INFO
+                string _fileName = "Readiness_" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".txt";
+
                 try
                 {
-                    string _fileName = "Readiness_" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".txt";
                     File.WriteAllText(_fileName, info.ToString());
-                    Process.Start("notepad.exe", _fileName);
                 }
                 catch { }
+
+                if ((info.DoApplicationStartAfterCheck && !info.PlayerStarted) || (!info.DoApplicationStartAfterCheck))
+                {
+                    try
+                    {
+                        Process.Start("notepad.exe", _fileName);
+                    }
+                    catch { }
+                }
+
+                #endregion
 
             }
             catch (Exception ex)
