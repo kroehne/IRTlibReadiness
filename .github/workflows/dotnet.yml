@@ -23,12 +23,15 @@ jobs:
     - name: Prepare Release Folder      
       run: mkdir $GITHUB_WORKSPACE/ReadinessTool
     - name: Publish
-      run: dotnet publish -o "$GITHUB_WORKSPACE/ReadinessTool"
+      run: dotnet publish -o "$GITHUB_WORKSPACE/ReadinessTool/"
+    - name: List files in the repository
+      run: |
+          ls ${{ github.workspace }}      
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v2
       with:
         name: ReadinessTool.exe
-        path: $GITHUB_WORKSPACE/ReadinessTool/ReadinessTool.exe  
+        path:  ${{ github.workspace }}/ReadinessTool/*.exe  
     - uses: "marvinpinto/action-automatic-releases@latest"
       with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -36,4 +39,4 @@ jobs:
           prerelease: true
           title: "IRTlibReadiness Console Application"
           files: |
-             $GITHUB_WORKSPACE/ReadinessTool/ReadinessTool.exe
+             ${{ github.workspace }}/ReadinessTool/*.exe 
