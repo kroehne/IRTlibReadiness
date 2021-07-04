@@ -20,13 +20,15 @@ jobs:
       run: dotnet build --no-restore
     - name: Test
       run: dotnet test --no-build --verbosity normal
+    - name: Prepare Release Folder      
+      run: mkdir $GITHUB_WORKSPACE/ReadinessTool
     - name: Publish
-      run: dotnet publish
+      run: dotnet publish -o "$GITHUB_WORKSPACE/ReadinessTool"
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v2
       with:
         name: ReadinessTool.exe
-        path: D:\a\IRTlibReadiness\IRTlibReadiness\IRTlibReadiness\bin\Debug\netcoreapp3.1\win-x64\publish\  
+        path: $GITHUB_WORKSPACE/ReadinessTool/ReadinessTool.exe  
     - uses: "marvinpinto/action-automatic-releases@latest"
       with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -34,4 +36,4 @@ jobs:
           prerelease: true
           title: "IRTlibReadiness Console Application"
           files: |
-            D:\a\IRTlibReadiness\IRTlibReadiness\IRTlibReadiness\bin\Debug\netcoreapp3.1\win-x64\publish\ReadinessTool.exe
+             $GITHUB_WORKSPACE/ReadinessTool/ReadinessTool.exe
