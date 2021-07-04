@@ -21,12 +21,12 @@ jobs:
     - name: Test
       run: dotnet test --no-build --verbosity normal
     - name: Prepare Release Folder      
-      run: mkdir $GITHUB_WORKSPACE/ReadinessTool
+      run: mkdir ${{ github.workspace }}/ReadinessTool
     - name: Publish
-      run: dotnet publish -o "$GITHUB_WORKSPACE/ReadinessTool/"
+      run: dotnet publish -o "${{ github.workspace }}/ReadinessTool/"
     - name: List files in the repository
       run: |
-          ls ${{ github.workspace }}      
+          ls ${{ github.workspace }}/ReadinessTool/      
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v2
       with:
