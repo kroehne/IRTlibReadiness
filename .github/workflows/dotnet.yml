@@ -39,4 +39,4 @@ jobs:
           prerelease: true
           title: "IRTlibReadiness Console Application"
           files: |
-             ${{ github.workspace }}\ReadinessTool\ReadinessTool.exe
+             ReadinessTool/ReadinessTool.exe
