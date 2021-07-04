@@ -367,11 +367,28 @@ namespace ReadinessTool
                     Console.WriteLine(e.StackTrace);
                 }
 
+                try
+                {
+                    long freeBytesOut;
+                   
+                    if (NativeMethods.GetDiskFreeSpaceEx(info.TempFolder, out freeBytesOut, out var _1, out var _2))
+                        info.TempFolderFreeBytes = freeBytesOut;
+
+                    if (NativeMethods.GetDiskFreeSpaceEx(info.RootDrive, out freeBytesOut, out var _3, out var _4))
+                        info.CurrentDriveFreeBytes = freeBytesOut;
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("\nChecking disk space failed with an unexpected error:");
+                    Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                    Console.WriteLine(e.StackTrace);
+                }
+
                 if (!Silent)
                 {
                     Console.ForegroundColor = ConsoleColor.White;
-                    Console.WriteLine(" - Tempfolder: {0} (Write Access: {1})", info.TempFolder, info.WriteAccessTempFolder);
-                    Console.WriteLine(" - Executable: {0} (Root drive: {1}, Write Access: {2})", info.Executable, info.RootDrive, info.WriteAccessRoot);
+                    Console.WriteLine(" - Tempfolder: {0} (Write Access: {1}, Free Bytes: {2})", info.TempFolder, info.WriteAccessTempFolder, info.TempFolderFreeBytes);
+                    Console.WriteLine(" - Executable: {0} (Root drive: {1}, Write Access: {2}, Free Bytes: {3})", info.Executable, info.RootDrive, info.WriteAccessRoot, info.CurrentDriveFreeBytes);
                 }
 
                 #endregion
@@ -711,8 +728,15 @@ namespace ReadinessTool
     }
 
     
-    public class NativeMethods
+    public static class NativeMethods
     {
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetDiskFreeSpaceEx(string lpDirectoryName,
+        out long lpFreeBytesAvailable,
+        out long lpTotalNumberOfBytes,
+        out long lpTotalNumberOfFreeBytes);
+
         [DllImport("user32.dll")]
         public static extern bool EnumDisplaySettings(string deviceName, int modeNum, ref DEVMODE devMode);
         [DllImport("user32.dll")]

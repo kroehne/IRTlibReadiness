@@ -62,14 +62,21 @@ namespace ReadinessTool
 
         #endregion
 
+        #region FILEACCESS
+        public bool WriteAccessRoot { get; set; }
+        public string TempFolder { get; set; }
+        public bool WriteAccessTempFolder { get; set; }
+
+        public long TempFolderFreeBytes { get; set; }
+        public long CurrentDriveFreeBytes { get; set; }
+
+        #endregion
+
         #region DRIVESPEED
         public double ReadScore { get; set; }
         public double WriteScore { get; set; }
 
         public List<string> SpeedDetails { get; set; }
-        public bool WriteAccessRoot { get; set; }
-        public string TempFolder { get; set; }
-        public bool WriteAccessTempFolder { get; set; }
 
         public string Executable { get; set; }
         public string RootDrive { get; set; }
@@ -154,6 +161,9 @@ namespace ReadinessTool
             catch
             {
             }
+
+            TempFolderFreeBytes = 0;
+            CurrentDriveFreeBytes = 0;
             WriteAccessRoot = false;
             TempFolder = "";
             WriteAccessTempFolder = false;
@@ -238,8 +248,8 @@ namespace ReadinessTool
                 _ret += "   " + s + "\n";
             _ret += "\n";
 
-            _ret += String.Format("- Tempfolder: {0} (Write Access: {1})\n", this.TempFolder, this.WriteAccessTempFolder);
-            _ret += String.Format("- Executable: {0} (Root drive: {1}, Write Access: {2})\n", this.Executable, this.RootDrive, this.WriteAccessRoot);
+            _ret += String.Format("- Tempfolder: {0} (Write Access: {1}, Free Bytes: {2})\n", this.TempFolder, this.WriteAccessTempFolder, this.TempFolderFreeBytes);
+            _ret += String.Format("- Executable: {0} (Root drive: {1}, Write Access: {2}, Free Bytes: {3})\n", this.Executable, this.RootDrive, this.WriteAccessRoot, this.CurrentDriveFreeBytes);
             _ret += "\n";
 
             _ret += String.Format("- Drive Speed: Read {0:0.00} MB/s, Write {0:0.00} MB/s\n", this.ReadScore, this.WriteScore);
