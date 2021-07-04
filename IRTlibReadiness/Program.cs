@@ -466,7 +466,7 @@ namespace ReadinessTool
                                 else if ((e.Status == TestStatus.Completed) && (e.Results != null))
                                 {
 
-                                    info.SpeedDetails.Add(String.Format("Avg: {1} {0}, Min: {2} {0}, Max: {3} {0}, Time: {4} ms", unit, e.Results.AvgThroughput,  e.Results.Min , e.Results.Max , e.ElapsedMs));
+                                    info.SpeedDetails.Add(String.Format("{5} -- Avg: {1} {0}, Min: {2} {0}, Max: {3} {0}, Time: {4} ms", unit, e.Results.AvgThroughput,  e.Results.Min , e.Results.Max , e.ElapsedMs, e.Results.TestDisplayName));
                                     if (!Silent)
                                     {
                                         Console.Write(string.Format("Avg: {1:0.00}{0}\t",unit,e.Results.AvgThroughput));
