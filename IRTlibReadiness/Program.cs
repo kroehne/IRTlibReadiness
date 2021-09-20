@@ -134,7 +134,7 @@ namespace ReadinessTool
                         int _number = 1;
                         if (int.TryParse(Configuration["ReadinessPortScanRequiredNumber"].ToString(), out _number))
                         {
-                            info.NumberOfPortsToCheck = _number;
+                            info.RequiredNumberOfPorts = _number;
                         }
                     }
 
@@ -707,7 +707,7 @@ namespace ReadinessTool
                                         Console.WriteLine("\n   Test file deleted.");
                                     }
                                     Console.ForegroundColor = ConsoleColor.White;
-                                    Console.WriteLine("\n - Drive Speed: Read {0:0.00} MB/s, Write {0:0.00} MB/s", info.ReadScore, info.WriteScore);
+                                    Console.WriteLine("\n - Drive Speed: Read {0:0.00} MB/s, Write {1:0.00} MB/s", info.ReadScore, info.WriteScore);
                                     Console.ResetColor();
                                 }
 
