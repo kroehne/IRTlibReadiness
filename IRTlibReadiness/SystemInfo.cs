@@ -8,12 +8,15 @@ namespace ReadinessTool
     public class SystemInfo
     {
         #region JOB
-        public bool DoDriveSpeedTest = true;
-        public bool DoAudioCheck = true;
-        public bool DoPortScan = true;
-        public bool DoApplicationStartAfterCheck = true;
+        //Parameters
+        public bool DoApplicationStartAfterCheck = false;
         public bool DoApplicationStartBeforeCheck = false;
 
+        public bool DoDriveSpeedTest = false;
+        public bool DoAudioCheck = false;
+        public bool DoPortScan = false;
+
+        //Check configuration
         public int StartScanMin = 8001;
         public int RequiredNumberOfPorts = 2;
         public int NumberOfPortsToCheck = 1000;

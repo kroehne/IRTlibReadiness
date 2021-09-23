@@ -13,7 +13,9 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Text;
 using System.Threading;
+using YamlDotNet.Serialization;
 
 /*
  *  Sapling.StorageSpeedMeter based on: https://github.com/maxim-saplin/NetCoreStorageSpeedTest (MIT License)
@@ -31,18 +33,101 @@ namespace ReadinessTool
              
             List<string> RegistryKeys = new List<string>() { @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation" };
 
+            #region ConfigurationData
+
+            bool runThisCheck = false;
+            string checkInfo = "";
+            checkValue = null;
+            CheckResult checkResult = null;
+
+            string fileNameYaml = @"ReadinessConfig.yaml";
+            string strExeFilePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string strWorkPath = System.IO.Path.GetDirectoryName(strExeFilePath);
+            string filePathYaml = System.IO.Path.Combine(strWorkPath, fileNameYaml);
+
+            ConfigurationMap configurationMap = new ConfigurationMap();
+            CheckResults checkResults = new CheckResults();
+
+            if (!File.Exists(filePathYaml))
+            {
+                //no config file so set the defaults and create a config file
+                configurationMap.SetDefaults();
+
+                StringBuilder sb = new StringBuilder();
+                StringWriter writer = new StringWriter(sb);
+
+                var serializer = new SerializerBuilder()
+                .Build();
+
+                //serialize the defaults to a new config file
+                serializer.Serialize(writer, configurationMap);
+
+                using (StreamWriter streamWriter = new StreamWriter(filePathYaml))
+                {
+                    streamWriter.Write(writer.ToString());
+                }
+                Console.WriteLine("Default config data was saved successfully to file: " + filePathYaml);
+
+            }
+            else
+            {
+                string configDataAsText = File.ReadAllText(filePathYaml);
+                StringReader stringReader = new StringReader(configDataAsText);
+
+                var deserializer = new DeserializerBuilder()
+                .Build();
+
+                configurationMap = deserializer.Deserialize<ConfigurationMap>(stringReader);
+                Console.WriteLine("Config data was successfully read from file: " + filePathYaml);
+            }
+            #endregion
+
+            CheckValue checkValue = null;
+            ParameterValue parameterValue = null;
+
             SystemInfo info = new SystemInfo()
             {
                 TotalRam = (double)RamDiskUtil.TotalRam,
                 FreeRam = (double)RamDiskUtil.FreeRam,
-                DoDriveSpeedTest = args.Length == 0,
-                DoPortScan = args.Length == 0,
-                DoApplicationStartAfterCheck = args.Length != 0
+                //the flags below are initialized to false, the setting is retrieved from the
+                //assigned CheckValue section within the yaml file
+                //DoDriveSpeedTest = args.Length == 0,
+                //DoPortScan = args.Length == 0,
+                //the flag below is initialized to false, the setting is retrieved from the
+                //assigned Parameter section within the yaml file or from the parameter applied (see below)
+                //DoApplicationStartAfterCheck = args.Length != 0
             };
+
+            //later the two if statements below can be removed
+            if (configurationMap.CheckRanges.TryGetValue("ReadinessDriveSpeedCheck", out checkValue))
+            {
+                info.DoDriveSpeedTest = checkValue.RunThisCheck;
+            }
+            if (configurationMap.CheckRanges.TryGetValue("PortAvailableCheck", out checkValue))
+            {
+                info.DoPortScan = checkValue.RunThisCheck;
+            }
+
+            #region setParametersFromYamlFile
+            if (configurationMap.Parameters.TryGetValue("ReadinessStartPlayer", out parameterValue))
+            {
+                info.DoApplicationStartBeforeCheck = parameterValue.Value.ToLower() == "startbefore";
+                info.DoApplicationStartAfterCheck = parameterValue.Value.ToLower() == "startafter";
+                //otherwise the Player will not be startet
+            }
+            if (configurationMap.Parameters.TryGetValue("ReadinessMode", out parameterValue))
+            {
+                Silent = parameterValue.Value.ToLower() == "silent";
+                Verbose = parameterValue.Value.ToLower() == "verbose";
+                //otherwise both values are false
+            }
+            #endregion
 
             info.AppFolder = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
 
-            #region Command Line 
+            #region Command Line
+
+            //If a parameter is applied it will overwrite the setting in the yaml file
             var Configuration = new ConfigurationBuilder()
                .AddCommandLine(args)
                .Build();
@@ -83,7 +168,7 @@ namespace ReadinessTool
                             Verbose = true;
                         }
                     }
-
+                    /*
                     if (Configuration["ReadinessDriveSpeed"] != null)
                     {
                         if (Configuration["ReadinessDriveSpeed"].ToString().ToLower() == "true")
@@ -95,7 +180,8 @@ namespace ReadinessTool
                             info.DoDriveSpeedTest = false;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessAudio"] != null)
                     {
                         if (Configuration["ReadinessAudio"].ToString().ToLower() == "true")
@@ -107,7 +193,8 @@ namespace ReadinessTool
                             info.DoAudioCheck = false;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessPortScan"] != null)
                     {
                         if (Configuration["ReadinessPortScan"].ToString().ToLower() == "true")
@@ -119,7 +206,8 @@ namespace ReadinessTool
                             info.DoPortScan = false;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessPortScanStart"] != null)
                     {
                         int _port = -1;
@@ -128,7 +216,8 @@ namespace ReadinessTool
                             info.StartScanMin = _port;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessPortScanRequiredNumber"] != null)
                     {
                         int _number = 1;
@@ -137,7 +226,8 @@ namespace ReadinessTool
                             info.RequiredNumberOfPorts = _number;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessPortScanNumbersToCheck"] != null)
                     {
                         int _number = 1000;
@@ -146,7 +236,8 @@ namespace ReadinessTool
                             info.NumberOfPortsToCheck = _number;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessScreenCheckWidth"] != null)
                     {
                         int _width = 1024;
@@ -155,7 +246,8 @@ namespace ReadinessTool
                             info.MinimalWidth = _width;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessScreenCheckHeight"] != null)
                     {
                         int _height = 768;
@@ -164,16 +256,19 @@ namespace ReadinessTool
                             info.MinimalHeight = _height;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessAppFolder"] != null)
                     {
                         info.AppFolder = Configuration["ReadinessAppFolder"].ToString();
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessAppName"] != null)
                     {
                         info.AppName = Configuration["ReadinessAppName"].ToString();
                     }
+                    */
                 }
             }
             catch (Exception e)
@@ -276,38 +371,75 @@ namespace ReadinessTool
                 #endregion
 
                 #region USER
+                //User role check
+                runThisCheck = false;
+                checkInfo = "UserRoleCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "");
 
-                try
+                //get config data
+                if (configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
-                    info.UserName = "Unkonwn";
-                    info.IsAdministrator = false;
-                    info.IsUser = false;
-                    info.IsGuest = false;
+                    runThisCheck = checkValue.RunThisCheck;
+                }
+                else { 
+                    checkResult.ResultInfo = "Config data missing";
+                }
 
-                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                if (!runThisCheck)
+                {
+                    Console.WriteLine("Test skipped: {0}", checkInfo);
+                    checkResult.ResultInfo += " Skipped";
+                }
+                else
+                {
+                    try
                     {
-                        using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
-                        {
-                            WindowsPrincipal principal = new WindowsPrincipal(identity);
-                            info.UserName = identity.Name;
-                            info.IsAdministrator = principal.IsInRole(WindowsBuiltInRole.Administrator);
-                            info.IsUser = principal.IsInRole(WindowsBuiltInRole.User);
-                            info.IsGuest = principal.IsInRole(WindowsBuiltInRole.Guest);
+                        info.UserName = "Unkonwn";
+                        info.IsAdministrator = false;
+                        info.IsUser = false;
+                        info.IsGuest = false;
 
-                            if (!Silent)
+                        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                        {
+                            using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
                             {
-                                Console.ForegroundColor = ConsoleColor.White;
-                                Console.WriteLine(" - Current User: {0} (Roles: Administrator = {1}, User = {2}, Guest = {3})", info.UserName, info.IsAdministrator, info.IsUser, info.IsGuest);
+                                WindowsPrincipal principal = new WindowsPrincipal(identity);
+                                info.UserName = identity.Name;
+                                info.IsAdministrator = principal.IsInRole(WindowsBuiltInRole.Administrator);
+                                info.IsUser = principal.IsInRole(WindowsBuiltInRole.User);
+                                info.IsGuest = principal.IsInRole(WindowsBuiltInRole.Guest);
+
+                                //principal.
+
+                                if (!Silent)
+                                {
+                                    Console.ForegroundColor = ConsoleColor.White;
+                                    Console.WriteLine(" - Current User: {0} (Roles: Administrator = {1}, User = {2}, Guest = {3})", info.UserName, info.IsAdministrator, info.IsUser, info.IsGuest);
+                                }
+                            }
+
+                            if(checkResult != null)
+                            {
+                                string role = "";
+                                if (info.IsAdministrator) role = "Administrator";
+                                if (info.IsUser) role = "User";
+                                if (info.IsGuest) role = "Guest";
+                                checkResult.Result = checkValue.ValidValues.Contains(role);
+                                checkResult.ResultInfo = "Current users role is: " + role;
                             }
                         }
                     }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("\nReading user account failed with an unexpected error:");
+                        Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                        Console.WriteLine(e.StackTrace);
+                        checkResult.ResultInfo = "Reading user account failed with an unexpected error";
+                    }
+
                 }
-                catch (Exception e)
-                {
-                    Console.WriteLine("\nReading user account failed with an unexpected error:");
-                    Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                    Console.WriteLine(e.StackTrace);
-                }
+                checkResults.CheckResultMap.Add(checkInfo, checkResult);
 
                 #endregion
 
