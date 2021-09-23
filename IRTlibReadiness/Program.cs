@@ -37,8 +37,9 @@ namespace ReadinessTool
 
             bool runThisCheck = false;
             string checkInfo = "";
-            checkValue = null;
+            CheckValue checkValue = null;
             CheckResult checkResult = null;
+            ParameterValue parameterValue = null;
 
             string fileNameYaml = @"ReadinessConfig.yaml";
             string strExeFilePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
@@ -81,9 +82,6 @@ namespace ReadinessTool
                 Console.WriteLine("Config data was successfully read from file: " + filePathYaml);
             }
             #endregion
-
-            CheckValue checkValue = null;
-            ParameterValue parameterValue = null;
 
             SystemInfo info = new SystemInfo()
             {
@@ -452,12 +450,25 @@ namespace ReadinessTool
                         var searcherInstance = searcher.Get();
                         foreach (var instance in searcherInstance)
                         {
+                            string displayName = "unknown";
+                            string productState = "unknown";
+                            string timestamp = "unknown";
+                            string pathToSignedProductExe = "unknown";
+                            string pathToSignedReportingExe = "unknown";
+
+                            //some of the properties may not be present
+                            try { var ts = instance.GetPropertyValue("displayName"); displayName = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property displayName not found"); }
+                            try { var ts = instance.GetPropertyValue("productState"); productState = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property productState not found"); }
+                            try { var ts = instance.GetPropertyValue("timestamp"); timestamp = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property timestamp not found"); }
+                            try { var ts = instance.GetPropertyValue("pathToSignedProductExe"); pathToSignedProductExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedProductExe not found"); }
+                            try { var ts = instance.GetPropertyValue("pathToSignedReportingExe"); pathToSignedReportingExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedReportingExe not found"); }
+                            
                             info.VirusDetais.Add(String.Format("Name: {0}, State {1}, Timestamp {2}, ProductExe {3}, ReportingExe: {4}", 
-                                instance["displayName"].ToString(),
-                                instance["productState"].ToString(),
-                                instance["timestamp"].ToString(), 
-                                instance["pathToSignedProductExe"].ToString() ,
-                                instance["pathToSignedReportingExe"].ToString()));
+                                displayName,
+                                productState,
+                                timestamp, 
+                                pathToSignedProductExe,
+                                pathToSignedReportingExe));
                         }
 
                         if (!Silent)
@@ -481,8 +492,9 @@ namespace ReadinessTool
                 }
 
                 #endregion
- 
+
                 #region GRAPHIC
+                
                 try
                 {
                     info.MinimalScreenSizeCheck = false;
@@ -495,7 +507,7 @@ namespace ReadinessTool
                         string _monitorState = "UNKOWN";
                         if (_monitors.Count > 0)
                         {
-                            _monitorName = String.Format("{0} ({1})", g.DeviceName.Replace(@"\\.\",""), _monitors[0].DeviceString);
+                            _monitorName = String.Format("{0} ({1})", g.DeviceName.Replace(@"\\.\", ""), _monitors[0].DeviceString);
                             _monitorState = _monitors[0].StateFlags.ToString();
                         }
                         var _mode = Display.GetDeviceMode(g.DeviceName);
@@ -523,7 +535,6 @@ namespace ReadinessTool
                     Console.WriteLine("\t" + e.GetType() + " " + e.Message);
                     Console.WriteLine(e.StackTrace);
                 }
-
                 #endregion
 
                 #region AUDIO
