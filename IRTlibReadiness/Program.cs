@@ -35,7 +35,6 @@ namespace ReadinessTool
 
             #region ConfigurationData
 
-            bool runThisCheck = false;
             string checkInfo = "";
             CheckValue checkValue = null;
             CheckResult checkResult = null;
@@ -80,6 +79,9 @@ namespace ReadinessTool
 
                 configurationMap = deserializer.Deserialize<ConfigurationMap>(stringReader);
                 Console.WriteLine("Config data was successfully read from file: " + filePathYaml);
+
+                //if there were missing parameters or check values complete the map by adding defaults
+                configurationMap.SetDefaults();
             }
             #endregion
 
@@ -166,6 +168,8 @@ namespace ReadinessTool
                             Verbose = true;
                         }
                     }
+                    //the check values previously were taken from the command line
+                    //now the values are located in the yaml file therefore the code below is inactive
                     /*
                     if (Configuration["ReadinessDriveSpeed"] != null)
                     {
@@ -279,9 +283,9 @@ namespace ReadinessTool
             #endregion
 
             try
-            { 
+            {
                 #region START PLAYER BEFORE 
-                  
+
                 info.PlayerAvailable = File.Exists(Path.Combine(info.AppFolder, info.AppName));
 
                 if (info.DoApplicationStartBeforeCheck)
@@ -327,9 +331,9 @@ namespace ReadinessTool
                             info.PlayerStarted = false;
                         }
                     }
-                  
+
                 }
-   
+
                 #endregion
 
                 #region STARTUP 
@@ -338,7 +342,7 @@ namespace ReadinessTool
                 {
                     Console.ForegroundColor = ConsoleColor.Blue;
                     Console.WriteLine("IRTlib: Readiness-Tool ({0})\n", info.Version);
-                    Console.ResetColor(); 
+                    Console.ResetColor();
                 }
 
                 if (!Silent & Verbose)
@@ -370,72 +374,71 @@ namespace ReadinessTool
 
                 #region USER
                 //User role check
-                runThisCheck = false;
                 checkInfo = "UserRoleCheck";
                 checkValue = null;
                 checkResult = new CheckResult(false, "");
 
                 //get config data
-                if (configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
-                    runThisCheck = checkValue.RunThisCheck;
-                }
-                else { 
-                    checkResult.ResultInfo = "Config data missing";
-                }
-
-                if (!runThisCheck)
-                {
-                    Console.WriteLine("Test skipped: {0}", checkInfo);
-                    checkResult.ResultInfo += " Skipped";
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
                 }
                 else
                 {
-                    try
+
+                    if (!checkValue.RunThisCheck)
                     {
-                        info.UserName = "Unkonwn";
-                        info.IsAdministrator = false;
-                        info.IsUser = false;
-                        info.IsGuest = false;
-
-                        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                    }
+                    else
+                    {
+                        try
                         {
-                            using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+                            info.UserName = "Unknown";
+                            info.IsAdministrator = false;
+                            info.IsUser = false;
+                            info.IsGuest = false;
+
+                            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                             {
-                                WindowsPrincipal principal = new WindowsPrincipal(identity);
-                                info.UserName = identity.Name;
-                                info.IsAdministrator = principal.IsInRole(WindowsBuiltInRole.Administrator);
-                                info.IsUser = principal.IsInRole(WindowsBuiltInRole.User);
-                                info.IsGuest = principal.IsInRole(WindowsBuiltInRole.Guest);
-
-                                //principal.
-
-                                if (!Silent)
+                                using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
                                 {
-                                    Console.ForegroundColor = ConsoleColor.White;
-                                    Console.WriteLine(" - Current User: {0} (Roles: Administrator = {1}, User = {2}, Guest = {3})", info.UserName, info.IsAdministrator, info.IsUser, info.IsGuest);
+                                    WindowsPrincipal principal = new WindowsPrincipal(identity);
+                                    info.UserName = identity.Name;
+                                    info.IsAdministrator = principal.IsInRole(WindowsBuiltInRole.Administrator);
+                                    info.IsUser = principal.IsInRole(WindowsBuiltInRole.User);
+                                    info.IsGuest = principal.IsInRole(WindowsBuiltInRole.Guest);
+
+                                    //principal.
+
+                                    if (!Silent)
+                                    {
+                                        Console.ForegroundColor = ConsoleColor.White;
+                                        Console.WriteLine(" - Current User: {0} (Roles: Administrator = {1}, User = {2}, Guest = {3})", info.UserName, info.IsAdministrator, info.IsUser, info.IsGuest);
+                                    }
+                                }
+
+                                if (checkResult != null)
+                                {
+                                    string role = "";
+                                    if (info.IsAdministrator) role = "Administrator";
+                                    if (info.IsUser) role = "User";
+                                    if (info.IsGuest) role = "Guest";
+
+                                    checkResult.Result = checkValue.ValidValues.Exists(item => item.value == role);
+                                    checkResult.ResultInfo = "Current users role is: " + role;
                                 }
                             }
-
-                            if(checkResult != null)
-                            {
-                                string role = "";
-                                if (info.IsAdministrator) role = "Administrator";
-                                if (info.IsUser) role = "User";
-                                if (info.IsGuest) role = "Guest";
-                                checkResult.Result = checkValue.ValidValues.Contains(role);
-                                checkResult.ResultInfo = "Current users role is: " + role;
-                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("\nReading user account failed with an unexpected error:");
+                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                            Console.WriteLine(e.StackTrace);
+                            checkResult.ResultInfo = "Reading user account failed with an unexpected error";
                         }
                     }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine("\nReading user account failed with an unexpected error:");
-                        Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                        Console.WriteLine(e.StackTrace);
-                        checkResult.ResultInfo = "Reading user account failed with an unexpected error";
-                    }
-
                 }
                 checkResults.CheckResultMap.Add(checkInfo, checkResult);
 
@@ -445,7 +448,7 @@ namespace ReadinessTool
 
                 try
                 {
-                    using (var searcher = new ManagementObjectSearcher(@"\\" + Environment.MachineName +  @"\root\SecurityCenter2", "SELECT * FROM AntivirusProduct"))
+                    using (var searcher = new ManagementObjectSearcher(@"\\" + Environment.MachineName + @"\root\SecurityCenter2", "SELECT * FROM AntivirusProduct"))
                     {
                         var searcherInstance = searcher.Get();
                         foreach (var instance in searcherInstance)
@@ -462,11 +465,11 @@ namespace ReadinessTool
                             try { var ts = instance.GetPropertyValue("timestamp"); timestamp = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property timestamp not found"); }
                             try { var ts = instance.GetPropertyValue("pathToSignedProductExe"); pathToSignedProductExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedProductExe not found"); }
                             try { var ts = instance.GetPropertyValue("pathToSignedReportingExe"); pathToSignedReportingExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedReportingExe not found"); }
-                            
-                            info.VirusDetais.Add(String.Format("Name: {0}, State {1}, Timestamp {2}, ProductExe {3}, ReportingExe: {4}", 
+
+                            info.VirusDetais.Add(String.Format("Name: {0}, State {1}, Timestamp {2}, ProductExe {3}, ReportingExe: {4}",
                                 displayName,
                                 productState,
-                                timestamp, 
+                                timestamp,
                                 pathToSignedProductExe,
                                 pathToSignedReportingExe));
                         }
@@ -494,54 +497,191 @@ namespace ReadinessTool
                 #endregion
 
                 #region GRAPHIC
-                
-                try
+
+                //screen size check
+                checkInfo = "ScreenResolutionCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "?");
+
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
-                    info.MinimalScreenSizeCheck = false;
-                    info.MinimalScreenSize = String.Format("{0}x{1}", info.MinimalWidth, info.MinimalHeight);
-                    var gr = Display.GetGraphicsAdapters();
-                    foreach (var g in gr)
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
                     {
-                        var _monitors = Display.GetMonitors(g.DeviceName);
-                        string _monitorName = g.DeviceName.Replace(@"\\.\", "");
-                        string _monitorState = "UNKOWN";
-                        if (_monitors.Count > 0)
-                        {
-                            _monitorName = String.Format("{0} ({1})", g.DeviceName.Replace(@"\\.\", ""), _monitors[0].DeviceString);
-                            _monitorState = _monitors[0].StateFlags.ToString();
-                        }
-                        var _mode = Display.GetDeviceMode(g.DeviceName);
-                        info.MonitorDetails.Add(String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState));
-
-                        if (_mode.dmPelsWidth >= info.MinimalWidth && _mode.dmPelsHeight >= info.MinimalHeight)
-                            info.MinimalScreenSizeCheck = true;
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped: " + checkInfo;
                     }
-
-                    if (!Silent)
+                    else
                     {
-                        Console.ForegroundColor = ConsoleColor.White;
-                        Console.WriteLine(" - Displays: {0} device(s) (Minimal Size: {1} - {2}) ", info.MonitorDetails.Count, info.MinimalScreenSize, info.MinimalScreenSizeCheck);
-                        if (Verbose)
+                        try
                         {
-                            foreach (var s in info.MonitorDetails)
-                                Console.WriteLine("   " + s);
-                        }
+                            ValidValue srH = checkValue.ValidValues.Find(item => item.name == "MinimalHorizontalRes");
+                            ValidValue srV = checkValue.ValidValues.Find(item => item.name == "MinimalVerticalRes");
 
+                            if (srH != null && srH != null)
+                            {
+                                try
+                                {
+                                    info.MinimalWidth = Convert.ToInt32(srH.value);
+                                    info.MinimalHeight = Convert.ToInt32(srV.value);
+                                }
+                                catch (OverflowException)
+                                {
+                                    Console.WriteLine("{0} or {1} is outside the range of the Int32 type.", srH.value, srV.value);
+                                }
+                                catch (FormatException)
+                                {
+                                    Console.WriteLine("The {0} or {1} value '{2}' or {3} is not in a recognizable format.",
+                                                      srH.value.GetType().Name, srV.value.GetType().Name, srH.value, srV.value);
+                                }
+                            }
+                            else
+                            {
+                                checkResult.ResultInfo = "Config data incomplete, using defaults: " + checkInfo;
+                            }
+
+                            info.MinimalScreenSizeCheck = false;
+                            info.MinimalScreenSize = String.Format("{0}x{1}", info.MinimalWidth, info.MinimalHeight);
+                            var gr = Display.GetGraphicsAdapters();
+                            foreach (var g in gr)
+                            {
+                                var _monitors = Display.GetMonitors(g.DeviceName);
+                                string _monitorName = g.DeviceName.Replace(@"\\.\", "");
+                                string _monitorState = "UNKOWN";
+                                if (_monitors.Count > 0)
+                                {
+                                    _monitorName = String.Format("{0} ({1})", g.DeviceName.Replace(@"\\.\", ""), _monitors[0].DeviceString);
+                                    _monitorState = _monitors[0].StateFlags.ToString();
+                                }
+                                var _mode = Display.GetDeviceMode(g.DeviceName);
+                                info.MonitorDetails.Add(String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState));
+
+                                //check the size
+                                //at least one of the displays must meet the check values
+                                if (_mode.dmPelsWidth >= info.MinimalWidth && _mode.dmPelsHeight >= info.MinimalHeight)
+                                {
+                                    //SystemInfo structure:
+                                    info.MinimalScreenSizeCheck = true;
+
+                                }
+                                //checkResult structure
+                                if (_mode.dmPelsWidth >= info.MinimalWidth && _mode.dmPelsHeight >= info.MinimalHeight)
+                                {
+                                    if (!checkResults.CheckResultMap.ContainsKey(checkInfo))
+                                        //add the check result for the current monitor
+                                        checkResults.CheckResultMap.Add(checkInfo, new CheckResult(true, String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState)));
+                                    else
+                                        //append the check result of the current monitor to the existing one
+                                        checkResults.CheckResultMap[checkInfo].ResultInfo += String.Format(" ; {0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState);
+                                }
+                            }//end foreach
+
+                            //if there were no suitable monitors found add a negative check result
+                            if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, new CheckResult(false, "No suitable monitors found")); }
+
+                            if (!Silent)
+                            {
+                                Console.ForegroundColor = ConsoleColor.White;
+                                Console.WriteLine(" - Displays: {0} device(s) (Minimal Size: {1} - {2}) ", info.MonitorDetails.Count, info.MinimalScreenSize, info.MinimalScreenSizeCheck);
+                                if (Verbose)
+                                {
+                                    foreach (var s in info.MonitorDetails)
+                                        Console.WriteLine("   " + s);
+                                }
+
+                            }
+                        }//end try
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("\nReading graphic devices failed with an unexpected error:");
+                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                            Console.WriteLine(e.StackTrace);
+                            //in case an error occurred add a negative check result
+                            if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, new CheckResult(false, "Check has failed. An unexpected error occurred")); }
+                        }
                     }
                 }
-                catch (Exception e)
-                {
-                    Console.WriteLine("\nReading graphic devices failed with an unexpected error:");
-                    Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                    Console.WriteLine(e.StackTrace);
-                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
                 #endregion
 
                 #region AUDIO
+                //Audio checks
+                checkInfo = "AudioDevicesCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "");
 
-                if (info.DoAudioCheck)
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
-                    try
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
+                    {
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                    }
+                    else
+                    {
+                        try
+                        {
+                            var _audioSearcher = new ManagementObjectSearcher("SELECT * FROM Win32_SoundDevice");
+                            var _audioCollection = _audioSearcher.Get();
+                            info.NumberOfAudioDevices = _audioCollection.Count;
+                            foreach (var d in _audioCollection)
+                            {
+                                info.AudioDetails.Add(String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status")));
+
+                                if (!checkResults.CheckResultMap.ContainsKey(checkInfo))
+                                    //add the check result for the current monitor
+                                    checkResults.CheckResultMap.Add(checkInfo, new CheckResult(true, String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status"))));
+                                else
+                                    //append the check result of the current monitor to the existing one
+                                    checkResults.CheckResultMap[checkInfo].ResultInfo += String.Format(" ; Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status"));
+
+                            }
+
+                            if (!Silent)
+                            {
+                                Console.ForegroundColor = ConsoleColor.White;
+                                Console.WriteLine(" - Audio: {0} device(s) (Test: {1}) ", info.NumberOfAudioDevices, info.PlayTestSuccess);
+                                if (Verbose)
+                                {
+                                    foreach (var s in info.AudioDetails)
+                                        Console.WriteLine("   " + s);
+                                }
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("\nReading audio devices failed with an unexpected error:");
+                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                            Console.WriteLine(e.StackTrace);
+                        }
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+
+                checkInfo = "AudioMidiToneCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "?");
+
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                {
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
+                    {
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                    }
+                    else
                     {
                         try
                         {
@@ -552,80 +692,105 @@ namespace ReadinessTool
                                 Thread.Sleep(1000);
                                 midiOut.Send(MidiMessage.StopNote(60, 0, 1).RawData);
                                 Thread.Sleep(1000);
+
+                                checkResult.Result = true;
+                                checkResult.ResultInfo = "Midi tone was played successfully";
                             }
                         }
                         catch
                         {
                             info.PlayTestSuccess = false;
-                        }
+                            checkResult.ResultInfo = "Error while playing midi tone";
 
-                        var _audioSearcher = new ManagementObjectSearcher("SELECT * FROM Win32_SoundDevice");
-                        var _audioCollection = _audioSearcher.Get();
-                        info.NumberOfAudioDevices = _audioCollection.Count;
-                        foreach (var d in _audioCollection)
-                        {
-                            info.AudioDetails.Add(String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status")));
-                        }
-
-                        if (!Silent)
-                        {
-                            Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine(" - Audio: {0} device(s) (Test: {1}) ", info.NumberOfAudioDevices, info.PlayTestSuccess);
-                            if (Verbose)
-                            {
-                                foreach (var s in info.AudioDetails)
-                                    Console.WriteLine("   " + s);
-                            }
                         }
                     }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine("\nReading graphic devices failed with an unexpected error:");
-                        Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                        Console.WriteLine(e.StackTrace);
-                    }
-
                 }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
-                 
+
                 #region NETWORK
-                try
+
+                //internet access check
+                checkInfo = "NetworkConnectivityCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "?");
+
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
-                    using (WebClient client = new WebClient())
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
                     {
-                        using (client.OpenRead("http://www.google.com/"))
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                    }
+                    else
+                    {
+
+                        ValidValue webClientURL = checkValue.ValidValues.Find(item => item.name == "WebClientURL");
+                        ValidValue webClientURLaccessExpected = checkValue.ValidValues.Find(item => item.name == "WebClientURLaccessExpected");
+
+                        if (webClientURL != null && webClientURLaccessExpected != null)
                         {
-                            info.OpenReadSucces = true;
+                            try
+                            {
+                                using (WebClient client = new WebClient())
+                                {
+                                    using (client.OpenRead(webClientURL.value))
+                                    {
+                                        info.OpenReadSucces = true;
+                                        checkResult.ResultInfo = String.Format("Access to {0} successful", webClientURL.value);
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                info.OpenReadSucces = false;
+                                checkResult.ResultInfo = String.Format("Access to {0} failed", webClientURL.value);
+                            }
+                            ValidValue pingURL = checkValue.ValidValues.Find(item => item.name == "PingURL");
+                            ValidValue pingURLaccessExpected = checkValue.ValidValues.Find(item => item.name == "PingURLaccessExpected");
+
+                            if (pingURL != null && pingURLaccessExpected != null)
+                            {
+                                try
+                                {
+                                    using (var ping = new Ping())
+                                    {
+                                        var reply = ping.Send(pingURL.value);
+                                        if (reply != null && reply.Status == IPStatus.Success)
+                                        {
+                                            info.PingSucces = true;
+                                            checkResult.ResultInfo += String.Format(" ; Ping of {0} successful", pingURL.value);
+                                        }
+                                        else
+                                        {
+                                            checkResult.ResultInfo += String.Format(" ; Ping of {0} failed", pingURL.value);
+                                        }
+                                    }
+                                }
+                                catch
+                                {
+                                    info.PingSucces = false;
+                                    checkResult.ResultInfo += String.Format(" ; Ping of {0} failed", pingURL.value);
+                                }
+
+                                if (info.OpenReadSucces && info.PingSucces) checkResult.Result = true;
+                            }
+
+                            if (!Silent)
+                            {
+                                Console.ForegroundColor = ConsoleColor.White;
+                                Console.WriteLine(" - Network Connectivity: Ping = {0}, OpenRead = {1}", info.PingSucces, info.OpenReadSucces);
+                            }
+
                         }
                     }
                 }
-                catch
-                {
-                    info.OpenReadSucces = false;
-                }
-
-                try
-                {
-                    using (var ping = new Ping())
-                    {
-                        var reply = ping.Send("www.google.com");
-                        if (reply != null && reply.Status == IPStatus.Success)
-                        {
-                            info.PingSucces = true;
-                        }
-                    }
-                }
-                catch
-                {
-                    info.PingSucces = false;
-                }
-
-                if (!Silent)
-                {
-                    Console.ForegroundColor = ConsoleColor.White;
-                    Console.WriteLine(" - Network Connectivity: Ping = {0}, OpenRead = {1}", info.PingSucces, info.OpenReadSucces);
-                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
