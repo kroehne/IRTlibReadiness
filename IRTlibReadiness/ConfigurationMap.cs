@@ -131,6 +131,7 @@ namespace ReadinessTool
                     ValidValues = new List<ValidValue>(),
                     UnitInfo = "-"
                 };
+                checkValue.ValidValues.Add(new ValidValue("TouchScreenExpected", "true"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
@@ -199,6 +200,7 @@ namespace ReadinessTool
                 };
                 checkValue.ValidValues.Add(new ValidValue("FirstPort", "8000"));
                 checkValue.ValidValues.Add(new ValidValue("LastPort", "8999"));
+                checkValue.ValidValues.Add(new ValidValue("MinimumPortsFree", "10"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 

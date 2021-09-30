@@ -807,7 +807,7 @@ namespace ReadinessTool
                             info.UsedPorts.Add(c.LocalEndPoint.Port);
                     }
 
-                    
+
                     if (!Silent)
                     {
                         Console.ForegroundColor = ConsoleColor.White;
@@ -830,12 +830,12 @@ namespace ReadinessTool
                                 if (!IsPortOpen("127.0.0.1", _port, new TimeSpan(250)))
                                 {
                                     info.FreePorts.Add(_port);
-                                } 
+                                }
                             }
                             _port++;
                             _i++;
                         }
-                       
+
                         if (!Silent)
                         {
                             Console.ForegroundColor = ConsoleColor.White;
@@ -854,10 +854,105 @@ namespace ReadinessTool
                     Console.WriteLine(e.StackTrace);
                 }
 
+
+                //port checks
+
+                //port check #1
+                checkInfo = "PortRangeAvailableCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "?");
+
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                {
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
+                    {
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped";
+                    }
+                    else
+                    {
+                        ValidValue firstPort = checkValue.ValidValues.Find(item => item.name == "FirstPort");
+                        ValidValue lastPort = checkValue.ValidValues.Find(item => item.name == "LastPort");
+                        ValidValue minimumPortsFree = checkValue.ValidValues.Find(item => item.name == "MinimumPortsFree");
+
+                        if (firstPort != null && lastPort != null && minimumPortsFree != null) {
+
+                            long _firstPort = 0;
+                            long _lastPort = 0;
+                            long _minimumPortsFree = 0;
+
+                            if (long.TryParse(firstPort.value, out _firstPort) && long.TryParse(lastPort.value, out _lastPort) && long.TryParse(minimumPortsFree.value, out _minimumPortsFree))
+                            {
+                                long _freePorts = 0;
+                                //count the number of available ports within the range 
+                                for(long i = _firstPort; i <= _lastPort; i++)
+                                {
+                                    if (!info.UsedPorts.Contains(i)) _freePorts++;
+                                }
+
+                                if(_freePorts >= _minimumPortsFree) checkResult.Result = true;
+
+                                checkResult.ResultInfo = String.Format("{0} ports are available in the range of port {1} to port {2}", _freePorts, _firstPort, _lastPort);
+
+                            }
+                            else
+                            {
+                                checkResult.ResultInfo += "Wrong config value format: ";
+                            }
+                        }
+                        else { checkResult.ResultInfo += "Config data partly missing";}
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                //port check #2
+                checkInfo = "PortAvailableCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "?");
+
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                {
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
+                    {
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped";
+                    }
+                    else
+                    {
+                        long _port = 0;
+                        checkResult.Result = true;
+                        checkResult.ResultInfo = "";
+                        foreach (ValidValue port in checkValue.ValidValues)
+                        {
+                            if (long.TryParse(port.value, out _port))
+                            {
+                                if (info.UsedPorts.Contains(_port))
+                                {
+                                    checkResult.Result = false;
+                                    checkResult.ResultInfo += String.Format(" port {0} not available;", _port);
+                                }
+                                else { checkResult.ResultInfo += String.Format(" port {0} available;", _port); }
+
+                            }
+                            else { checkResult.ResultInfo += String.Format(" Wrong format: port {0};", port.value); }
+                        }
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+
                 #endregion
 
                 #region FILEACCESS
-                 
+
                 try
                 {
                     info.TempFolder = Path.GetTempPath();
