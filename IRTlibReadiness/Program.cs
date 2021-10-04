@@ -795,7 +795,12 @@ namespace ReadinessTool
                 #endregion
 
                 #region PORTS
-
+                /*
+                 * checks
+                 * a) if a number of ports is available within a range of ports (PortRangeAvailableCheck)
+                 * b) if ports provided in a list are available (PortAvailableCheck)
+                 * 
+                 */
                 try
                 {
 
@@ -952,6 +957,12 @@ namespace ReadinessTool
                 #endregion
 
                 #region FILEACCESS
+                /*
+                 * folder accessable check
+                 * a) checks if the user's temp folder (C:\Users\<currentUser>\AppData\Local\Temp\) is writeable
+                 * b) checks if the root folder (C:\) is writeable
+                 */
+                #region FILEACCESS - originalCheck
 
                 try
                 {
@@ -965,11 +976,10 @@ namespace ReadinessTool
                     Console.WriteLine("\t" + e.GetType() + " " + e.Message);
                     Console.WriteLine(e.StackTrace);
                 }
-
                 try
                 {
                     long freeBytesOut;
-                   
+
                     if (NativeMethods.GetDiskFreeSpaceEx(info.TempFolder, out freeBytesOut, out var _1, out var _2))
                         info.TempFolderFreeBytes = freeBytesOut;
 
@@ -989,10 +999,144 @@ namespace ReadinessTool
                     Console.WriteLine(" - Tempfolder: {0} (Write Access: {1}, Free Bytes: {2})", info.TempFolder, info.WriteAccessTempFolder, info.TempFolderFreeBytes);
                     Console.WriteLine(" - Executable: {0} (Root drive: {1}, Write Access: {2}, Free Bytes: {3})", info.Executable, info.RootDrive, info.WriteAccessRoot, info.CurrentDriveFreeBytes);
                 }
+                #endregion
+
+                //folder writable check
+                checkInfo = "FoldersWritableCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "?");
+
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                {
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
+                    {
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped";
+                    }
+                    else
+                    {
+                        string Executable = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                        checkResult.Result = true;
+                        checkResult.ResultInfo = "";
+                        foreach (ValidValue folder in checkValue.ValidValues)
+                        {
+                            if (folder.value.Contains("<USER>")) { folder.value = folder.value.Replace("<USER>", Environment.UserName.ToString()); };
+                            if (folder.value.ToUpper().Equals("USERTEMPFOLDER")) { folder.value = Path.GetTempPath(); };
+                            if (folder.value.ToUpper().Equals("ROOTDRIVE")) { folder.value = System.IO.Path.GetPathRoot(Executable); };
+
+                            try
+                            {
+                                checkResult.ResultInfo += String.Format("Folder {0}: ", folder.value);
+                                if (!HasWritePermissionOnDir(folder.value))
+                                {
+                                    checkResult.Result = false;
+                                    checkResult.ResultInfo += "NOK ";
+                                }else
+                                    checkResult.ResultInfo += "OK ";
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("\nChecking write permission failed with an unexpected error:");
+                                Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                                Console.WriteLine(e.StackTrace);
+                                checkResult.ResultInfo += " Checking write permission failed ";
+                            }
+                        }
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                //folder free space
+                checkInfo = "FoldersFreeSpaceCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "?");
+
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                {
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
+                    {
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped";
+                    }
+                    else
+                    {
+                        string Executable = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                        checkResult.Result = true;
+                        checkResult.ResultInfo = "";
+                        foreach (ValidValue folder in checkValue.ValidValues)
+                        {
+                            if (folder.name.Contains("<USER>")) { folder.name = folder.name.Replace("<USER>", Environment.UserName.ToString()); };
+                            if (folder.name.ToUpper().Equals("USERTEMPFOLDER")) { folder.name = Path.GetTempPath(); };
+                            if (folder.name.ToUpper().Equals("ROOTDRIVE")) { folder.name = System.IO.Path.GetPathRoot(Executable); };
+
+                            try
+                            {
+                                long freeBytesOut = 0;
+                                long expectedFreeBytes = 0;
+
+                                try
+                                {
+                                    expectedFreeBytes = Convert.ToInt32(folder.value) * 1024;
+                                }
+                                catch (OverflowException)
+                                {
+                                    Console.WriteLine("{0} is outside the range of the Int32 type.", folder.value);
+                                }
+                                catch (FormatException)
+                                {
+                                    Console.WriteLine("The {0} value is not in a recognizable format.",
+                                                      folder.value.GetType().Name);
+                                }
+
+                                if (NativeMethods.GetDiskFreeSpaceEx(folder.name, out freeBytesOut, out var _1, out var _2))
+                                { 
+                                    checkResult.ResultInfo += String.Format("Folder {0} free space {1}: ", folder.name, freeBytesOut);
+                                    if (freeBytesOut <  expectedFreeBytes)
+                                    {
+                                        checkResult.Result = false;
+                                        checkResult.ResultInfo += "NOK ";
+                                    }
+                                    else
+                                        checkResult.ResultInfo += "OK ";
+                                }else
+                                    checkResult.ResultInfo += "getting free space failed ";
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("\nChecking disk space failed with an unexpected error:");
+                                Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                                Console.WriteLine(e.StackTrace);
+                                checkResult.ResultInfo += " Checking disk space failed ";
+                            }
+                        }
+
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
                 #region DRIVESPEED
+                checkInfo = "DriveSpeedCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "");
+
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                {
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (checkValue.RunThisCheck) info.DoDriveSpeedTest = true;
+                }
 
                 if (info.DoDriveSpeedTest)
                 { 
@@ -1123,13 +1267,51 @@ namespace ReadinessTool
                         Console.WriteLine("\t" + e.GetType() + " " + e.Message);
                         Console.WriteLine(e.StackTrace);
                     }
-                     
+
+                    if (checkValue != null)
+                    {
+
+                        ValidValue minimalSpeedRead = checkValue.ValidValues.Find(item => item.name == "MinimalSpeedRead");
+                        ValidValue minimalSpeedWrite = checkValue.ValidValues.Find(item => item.name == "MinimalSpeedWrite");
+
+                        if (minimalSpeedRead != null && minimalSpeedWrite != null)
+                        {
+                            double msr = -1;
+                            double msw = -1;
+                            try
+                            {
+                                msr = Convert.ToDouble(minimalSpeedRead.value);
+                                msw = Convert.ToDouble(minimalSpeedWrite.value);
+                            }
+                            catch (FormatException)
+                            {
+                                Console.WriteLine("Unable to convert '{0}' or '{1}' to a Double.", minimalSpeedRead.value, minimalSpeedWrite.value);
+                            }
+                            catch (OverflowException)
+                            {
+                                Console.WriteLine("'{0}' or '{1}' is outside the range of a Double.", minimalSpeedRead.value, minimalSpeedWrite.value);
+                            }
+
+                            if (msr > -1 && msw > -1)
+                            {
+                                if (info.ReadScore >= msr && info.WriteScore >= msw) checkResult.Result = true;
+
+                                checkResult.ResultInfo = String.Format("ReadScore: {0:0.00} (expected: {1}) WriteScore: {2:0.00} (expected: {3})",
+                                    info.ReadScore,
+                                    msr,
+                                    info.WriteScore,
+                                    msw);
+                            }
+                        }
+
+                    }
+                    if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
                 }
 
                 #endregion
 
                 #region REGISTRY
-                 
+
                 try
                 {
                     if (RegistryKeys.Count > 0)

@@ -15,6 +15,7 @@ namespace ReadinessTool
         public Dictionary<string, CheckValue> CheckRanges { get; set; }
         public void SetDefaults(){
 
+            #region Parameter
             //Parameters +
 
             //create dictionary if not already done
@@ -45,6 +46,7 @@ namespace ReadinessTool
             }
 
             //Parameters -
+            #endregion
 
             //Check values +
             //create dictionary
@@ -87,7 +89,7 @@ namespace ReadinessTool
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
-            //Memory checks
+            //Memory checks+
             checkValueKey = "MemoryInstalledCheck";
             if (!this.CheckRanges.ContainsKey(checkValueKey))
             {
@@ -103,6 +105,7 @@ namespace ReadinessTool
                 checkValue.ValidValues.Add(new ValidValue("Minimal memory installed", "2"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
+            //Memory checks-
 
             checkValueKey = "MemoryAvailableCheck";
             if (!this.CheckRanges.ContainsKey(checkValueKey))
@@ -225,14 +228,30 @@ namespace ReadinessTool
             {
                 checkValue = new CheckValue
                 {
-                    PurposeInfo = "Checks if a folder is writable and the free space",
+                    PurposeInfo = "Checks if a folder is writable.",
                     OptionalCheck = false,
                     RunThisCheck = true,
                     ValidValues = new List<ValidValue>(),
-                    UnitInfo = "kB"
+                    UnitInfo = "Folder, <FolderName> or one of [USERTEMPFOLDER, ROOTDRIVE]"
                 };
-                //checkValue.ValidValues.Add("C:\\Users\\<USER>\\AppData\\Local\\Temp\\");
-                checkValue.ValidValues.Add(new ValidValue("C:\\Users\\<USER>\\AppData\\Local\\Temp\\", "500"));
+                checkValue.ValidValues.Add(new ValidValue("Folder", "USERTEMPFOLDER"));
+                checkValue.ValidValues.Add(new ValidValue("Folder", "ROOTDRIVE"));
+                this.CheckRanges.TryAdd(checkValueKey, checkValue);
+            }
+
+            checkValueKey = "FoldersFreeSpaceCheck";
+            if (!this.CheckRanges.ContainsKey(checkValueKey))
+            {
+                checkValue = new CheckValue
+                {
+                    PurposeInfo = "Checks if a folder has sufficient free space",
+                    OptionalCheck = false,
+                    RunThisCheck = true,
+                    ValidValues = new List<ValidValue>(),
+                    UnitInfo = "<FolderName> or one of [USERTEMPFOLDER, ROOTDRIVE], expected free space in kB"
+                };
+                checkValue.ValidValues.Add(new ValidValue("C:\\Users\\<USER>\\AppData\\Local\\Temp\\", "512"));
+                checkValue.ValidValues.Add(new ValidValue("C:\\", "1024"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
@@ -247,7 +266,8 @@ namespace ReadinessTool
                     ValidValues = new List<ValidValue>(),
                     UnitInfo = "MB/s"
                 };
-                checkValue.ValidValues.Add(new ValidValue("MinimalTransfer", "25"));
+                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedRead", "25"));
+                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedWrite", "25"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
@@ -256,7 +276,7 @@ namespace ReadinessTool
             {
                 checkValue = new CheckValue
                 {
-                    PurposeInfo = "Checks to play a midi tone",
+                    PurposeInfo = "Checks if a midi tone can be played",
                     OptionalCheck = false,
                     RunThisCheck = true,
                     ValidValues = new List<ValidValue>(),
