@@ -372,6 +372,99 @@ namespace ReadinessTool
                 }
                 #endregion
 
+                #region MEMORY
+                //Memory check #1
+                checkInfo = "MemoryInstalledCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "");
+
+                //get config data
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                {
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
+                    {
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                    }
+                    else
+                    {
+                        ValidValue minimalMemoryInstalled = checkValue.ValidValues.Find(item => item.name == "MinimalMemoryInstalled");
+                        if(minimalMemoryInstalled != null)
+                        {
+                            try
+                            {
+                                double mmi = Convert.ToDouble(minimalMemoryInstalled.value);//GB
+                                double tms = info.TotalRam / 1024 / 1024 / 1024;
+
+                                if(tms >= mmi) checkResult.Result = true;                               
+                                checkResult.ResultInfo = String.Format("Memory installed: {0:0.00}GB (expected: {1:0.00}GB)", tms, mmi);
+
+                            }
+                            catch (OverflowException)
+                            {
+                                Console.WriteLine("{0} or {1} is outside the range of the Int32 type.", minimalMemoryInstalled.value, info.TotalMemorySystem);
+                            }
+                            catch (FormatException)
+                            {
+                                Console.WriteLine("The {0} or {1} value is not in a recognizable format.",
+                                                  minimalMemoryInstalled.value, info.TotalMemorySystem);
+                            }
+                        }
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                //Memory check #2
+                checkInfo = "MemoryAvailableCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "");
+
+                //get config data
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                {
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
+                    {
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                    }
+                    else
+                    {
+                        ValidValue minimalMemoryAvailable = checkValue.ValidValues.Find(item => item.name == "MinimalMemoryAvailable");
+                        if (minimalMemoryAvailable != null)
+                        {
+                            try
+                            {
+                                double mma = Convert.ToDouble(minimalMemoryAvailable.value);//GB
+                                double fms = info.FreeRam / 1024 / 1024 / 1024;
+
+                                if (fms >= mma) checkResult.Result = true;
+                                checkResult.ResultInfo = String.Format("Memory available: {0:0.00}GB (expected: {1:0.00}GB)", fms, mma);
+
+                            }
+                            catch (OverflowException)
+                            {
+                                Console.WriteLine("{0} or {1} is outside the range of the Int32 type.", minimalMemoryAvailable.value, info.FreeMemorySystem);
+                            }
+                            catch (FormatException)
+                            {
+                                Console.WriteLine("The {0} or {1} value is not in a recognizable format.",
+                                                  minimalMemoryAvailable.value, info.FreeMemorySystem);
+                            }
+                        }
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                #endregion
+
                 #region USER
                 //User role check
                 checkInfo = "UserRoleCheck";
@@ -440,12 +533,11 @@ namespace ReadinessTool
                         }
                     }
                 }
-                checkResults.CheckResultMap.Add(checkInfo, checkResult);
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
                 #region VIRUS
-
                 try
                 {
                     using (var searcher = new ManagementObjectSearcher(@"\\" + Environment.MachineName + @"\root\SecurityCenter2", "SELECT * FROM AntivirusProduct"))
@@ -494,10 +586,44 @@ namespace ReadinessTool
                     Console.WriteLine(e.StackTrace);
                 }
 
+                //anti virus software check check
+                checkInfo = "AntiVirusSoftwareCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "?");
+
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                {
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
+                    {
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                    }
+                    else
+                    {
+                        ValidValue antiVirusSoftwareExpected = checkValue.ValidValues.Find(item => item.name == "AntiVirusSoftwareExpected");
+                        if (antiVirusSoftwareExpected != null)
+                        {
+                            if (antiVirusSoftwareExpected.value.ToLower().Equals("true")) { checkResult.Result = info.VirusDetais.Count > 0; }
+
+                            checkResult.ResultInfo = "Anti virus software:";
+                            foreach (var s in info.VirusDetais)
+                            {
+                                string[] ss = s.Split(',');
+                                if (ss.Length > 0) checkResult.ResultInfo += String.Format(" {0},", ss[0]);
+                            }
+
+                            checkResult.ResultInfo += String.Format(" (expected: {0})", antiVirusSoftwareExpected.value);
+                        }
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
                 #endregion
 
                 #region GRAPHIC
-
                 //screen size check
                 checkInfo = "ScreenResolutionCheck";
                 checkValue = null;
@@ -605,6 +731,37 @@ namespace ReadinessTool
                     }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                #endregion
+
+                #region TOUCHSCREEN
+                //touch screen check
+                checkInfo = "TouchScreenCheck";
+                checkValue = null;
+                checkResult = new CheckResult(false, "?");
+
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                {
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (!checkValue.RunThisCheck)
+                    {
+                        if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
+                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                    }
+                    else
+                    {
+                        ValidValue touchScreenExpected = checkValue.ValidValues.Find(item => item.name == "TouchScreenExpected");
+                        if (touchScreenExpected != null)
+                        {
+                            if (touchScreenExpected.value.ToLower().Equals("true")) { checkResult.Result = info.TouchEnabled == true;}
+                            checkResult.ResultInfo = String.Format("Touch screen enabled: {0} (expected: {1})", info.TouchEnabled, touchScreenExpected.value);
+                        }
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
                 #endregion
 
                 #region AUDIO
@@ -1311,7 +1468,57 @@ namespace ReadinessTool
                 #endregion
 
                 #region REGISTRY
+                checkInfo = "RegistryKeyCheck";
+                checkValue = null;
+                checkResult = new CheckResult(true, "");
 
+                if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
+                {
+                    checkResult.ResultInfo = "Config data missing: " + checkInfo;
+                }
+                else
+                {
+                    if (checkValue.RunThisCheck)
+                    {
+
+                        try
+                        {
+                            //if (RegistryKeys.Count > 0)
+                            if (checkValue.ValidValues.Count > 0)
+                                {
+
+                                foreach (ValidValue p in checkValue.ValidValues)
+                                {
+                                    var _parts = p.name.Split(";", StringSplitOptions.RemoveEmptyEntries);
+                                    string _result = (string)Registry.GetValue(_parts[0], _parts[1], "not set");
+                                    if (_result != null)
+                                    {
+                                        if (!_result.Equals(p.value)) checkResult.Result = false;
+                                        checkResult.ResultInfo += String.Format("Key: {0} value {1} result {2} (expected:{3}) ", _parts[0], _parts[1], _result, p.value);
+                                    }
+                                    else
+                                    {
+                                        checkResult.Result = false;
+                                        checkResult.ResultInfo += String.Format("Key: {0} value {1} undefined (expected:{2}) ", _parts[0], _parts[1], p.value);
+                                    }
+                                }
+                            }
+
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("\n Reading registry failed with an unexpected error:");
+                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                            Console.WriteLine(e.StackTrace);
+                            checkResult.ResultInfo += " Reading registry failed with an unexpected error";
+                        }
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                /*
+                  List<string> RegistryKeys = new List<string>() { @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation" };
+                */
                 try
                 {
                     if (RegistryKeys.Count > 0)

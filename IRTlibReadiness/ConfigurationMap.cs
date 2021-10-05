@@ -48,6 +48,7 @@ namespace ReadinessTool
             //Parameters -
             #endregion
 
+            #region Checks
             //Check values +
             //create dictionary
             if (this.CheckRanges == null) this.CheckRanges = new Dictionary<string, CheckValue>();
@@ -60,7 +61,7 @@ namespace ReadinessTool
             {
                 checkValue = new CheckValue
                 {
-                    PurposeInfo = "Checks if the operating system is suitable",
+                    PurposeInfo = "Checks if the operating system generally is suitable",
                     OptionalCheck = false,
                     RunThisCheck = true,
                     ValidValues = new List<ValidValue>(),
@@ -69,6 +70,21 @@ namespace ReadinessTool
                 checkValue.ValidValues.Add(new ValidValue("OS", "Windows 7"));
                 checkValue.ValidValues.Add(new ValidValue("OS", "Windows 8"));
                 checkValue.ValidValues.Add(new ValidValue("OS", "Windows 10"));
+                this.CheckRanges.TryAdd(checkValueKey, checkValue);
+            }
+
+            checkValueKey = "OperatingSystemTypeCheck";
+            if (!this.CheckRanges.ContainsKey(checkValueKey))
+            {
+                checkValue = new CheckValue
+                {
+                    PurposeInfo = "Checks if the operating system is suitable",
+                    OptionalCheck = false,
+                    RunThisCheck = true,
+                    ValidValues = new List<ValidValue>(),
+                    UnitInfo = "operating system property"
+                };
+                checkValue.ValidValues.Add(new ValidValue("64bitexpected", "true"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
@@ -102,10 +118,9 @@ namespace ReadinessTool
                     ValidValues = new List<ValidValue>(),
                     UnitInfo = "GB"
                 };
-                checkValue.ValidValues.Add(new ValidValue("Minimal memory installed", "2"));
+                checkValue.ValidValues.Add(new ValidValue("MinimalMemoryInstalled", "2"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
-            //Memory checks-
 
             checkValueKey = "MemoryAvailableCheck";
             if (!this.CheckRanges.ContainsKey(checkValueKey))
@@ -119,9 +134,10 @@ namespace ReadinessTool
                     ValidValues = new List<ValidValue>(),
                     UnitInfo = "GB"
                 };
-                checkValue.ValidValues.Add(new ValidValue("Minimal memory available", "1"));
+                checkValue.ValidValues.Add(new ValidValue("MinimalMemoryAvailable", "0,5"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
+            //Memory checks-
 
             checkValueKey = "TouchScreenCheck";
             if (!this.CheckRanges.ContainsKey(checkValueKey))
@@ -135,6 +151,21 @@ namespace ReadinessTool
                     UnitInfo = "-"
                 };
                 checkValue.ValidValues.Add(new ValidValue("TouchScreenExpected", "true"));
+                this.CheckRanges.TryAdd(checkValueKey, checkValue);
+            }
+
+            checkValueKey = "AntiVirusSoftwareCheck";
+            if (!this.CheckRanges.ContainsKey(checkValueKey))
+            {
+                checkValue = new CheckValue
+                {
+                    PurposeInfo = "Checks for anti virus software",
+                    OptionalCheck = true,
+                    RunThisCheck = true,
+                    ValidValues = new List<ValidValue>(),
+                    UnitInfo = "-"
+                };
+                checkValue.ValidValues.Add(new ValidValue("AntiVirusSoftwareExpected", "true"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
@@ -177,16 +208,14 @@ namespace ReadinessTool
             {
                 checkValue = new CheckValue
                 {
-                    PurposeInfo = "Registry key check. Apply keys and expected values or 'not set'",
+                    PurposeInfo = "Registry check. Apply keys, vars and expected values or 'not set'",
                     OptionalCheck = false,
                     RunThisCheck = true,
                     ValidValues = new List<ValidValue>(),
                     UnitInfo = "-"
                 };
-                checkValue.ValidValues.Add(new ValidValue("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\", "DisableLockWorkstation=1"));
+                checkValue.ValidValues.Add(new ValidValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation", "not set"));
 
-                //checkValue.ValidValues.Add("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\");
-                //checkValue.ValidValues.Add("DisableLockWorkstation=1");
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
@@ -299,6 +328,7 @@ namespace ReadinessTool
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
             //Check values -
+            #endregion
 
         }
 
