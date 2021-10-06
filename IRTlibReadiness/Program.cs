@@ -14,6 +14,7 @@ using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using YamlDotNet.Serialization;
 
@@ -40,15 +41,23 @@ namespace ReadinessTool
             CheckResult checkResult = null;
             ParameterValue parameterValue = null;
 
-            string fileNameYaml = @"ReadinessConfig.yaml";
             string strExeFilePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
             string strWorkPath = System.IO.Path.GetDirectoryName(strExeFilePath);
-            string filePathYaml = System.IO.Path.Combine(strWorkPath, fileNameYaml);
+
+            string configFileNameYaml = @"ReadinessConfig.yaml";
+            string configFileNameJson = @"ReadinessConfig.json";
+            string configFilePathYaml = System.IO.Path.Combine(strWorkPath, configFileNameYaml);
+            string configFilePathJson = System.IO.Path.Combine(strWorkPath, configFileNameJson);
+
+            string resultFileNameYaml = @"ReadinessResult.yaml";
+            string resultFileNameJson = @"ReadinessResult.json";
+            string resultFilePathYaml = System.IO.Path.Combine(strWorkPath, resultFileNameYaml);
+            string resultFilePathJson = System.IO.Path.Combine(strWorkPath, resultFileNameJson);
 
             ConfigurationMap configurationMap = new ConfigurationMap();
             CheckResults checkResults = new CheckResults();
 
-            if (!File.Exists(filePathYaml))
+            if (!File.Exists(configFilePathYaml))
             {
                 //no config file so set the defaults and create a config file
                 configurationMap.SetDefaults();
@@ -62,23 +71,23 @@ namespace ReadinessTool
                 //serialize the defaults to a new config file
                 serializer.Serialize(writer, configurationMap);
 
-                using (StreamWriter streamWriter = new StreamWriter(filePathYaml))
+                using (StreamWriter streamWriter = new StreamWriter(configFilePathYaml))
                 {
                     streamWriter.Write(writer.ToString());
                 }
-                Console.WriteLine("Default config data was saved successfully to file: " + filePathYaml);
+                Console.WriteLine("Default config data was saved successfully to file: " + configFilePathYaml);
 
             }
             else
             {
-                string configDataAsText = File.ReadAllText(filePathYaml);
+                string configDataAsText = File.ReadAllText(configFilePathYaml);
                 StringReader stringReader = new StringReader(configDataAsText);
 
                 var deserializer = new DeserializerBuilder()
                 .Build();
 
                 configurationMap = deserializer.Deserialize<ConfigurationMap>(stringReader);
-                Console.WriteLine("Config data was successfully read from file: " + filePathYaml);
+                Console.WriteLine("Config data was successfully read from file: " + configFilePathYaml);
 
                 //if there were missing parameters or check values complete the map by adding defaults
                 configurationMap.SetDefaults();
@@ -376,7 +385,7 @@ namespace ReadinessTool
                 //Memory check #1
                 checkInfo = "MemoryInstalledCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 //get config data
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
@@ -388,7 +397,7 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
@@ -400,7 +409,7 @@ namespace ReadinessTool
                                 double mmi = Convert.ToDouble(minimalMemoryInstalled.value);//GB
                                 double tms = info.TotalRam / 1024 / 1024 / 1024;
 
-                                if(tms >= mmi) checkResult.Result = true;                               
+                                if(tms >= mmi) checkResult.Result = ResultType.succeeded;                               
                                 checkResult.ResultInfo = String.Format("Memory installed: {0:0.00}GB (expected: {1:0.00}GB)", tms, mmi);
 
                             }
@@ -416,12 +425,12 @@ namespace ReadinessTool
                         }
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 //Memory check #2
                 checkInfo = "MemoryAvailableCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 //get config data
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
@@ -433,7 +442,7 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
@@ -445,7 +454,7 @@ namespace ReadinessTool
                                 double mma = Convert.ToDouble(minimalMemoryAvailable.value);//GB
                                 double fms = info.FreeRam / 1024 / 1024 / 1024;
 
-                                if (fms >= mma) checkResult.Result = true;
+                                if (fms >= mma) checkResult.Result = ResultType.succeeded;
                                 checkResult.ResultInfo = String.Format("Memory available: {0:0.00}GB (expected: {1:0.00}GB)", fms, mma);
 
                             }
@@ -469,7 +478,7 @@ namespace ReadinessTool
                 //User role check
                 checkInfo = "UserRoleCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 //get config data
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
@@ -482,7 +491,7 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
@@ -519,7 +528,7 @@ namespace ReadinessTool
                                     if (info.IsUser) role = "User";
                                     if (info.IsGuest) role = "Guest";
 
-                                    checkResult.Result = checkValue.ValidValues.Exists(item => item.value == role);
+                                    if (checkValue.ValidValues.Exists(item => item.value == role)) checkResult.Result = ResultType.succeeded;
                                     checkResult.ResultInfo = "Current users role is: " + role;
                                 }
                             }
@@ -533,7 +542,7 @@ namespace ReadinessTool
                         }
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
@@ -589,7 +598,7 @@ namespace ReadinessTool
                 //anti virus software check check
                 checkInfo = "AntiVirusSoftwareCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "?");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -600,14 +609,14 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
                         ValidValue antiVirusSoftwareExpected = checkValue.ValidValues.Find(item => item.name == "AntiVirusSoftwareExpected");
                         if (antiVirusSoftwareExpected != null)
                         {
-                            if (antiVirusSoftwareExpected.value.ToLower().Equals("true")) { checkResult.Result = info.VirusDetais.Count > 0; }
+                            if (antiVirusSoftwareExpected.value.ToLower().Equals("true")) { if (info.VirusDetais.Count > 0) checkResult.Result = ResultType.succeeded; }
 
                             checkResult.ResultInfo = "Anti virus software:";
                             foreach (var s in info.VirusDetais)
@@ -620,14 +629,14 @@ namespace ReadinessTool
                         }
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
                 #endregion
 
                 #region GRAPHIC
                 //screen size check
                 checkInfo = "ScreenResolutionCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "?");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -638,7 +647,7 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
@@ -698,7 +707,7 @@ namespace ReadinessTool
                                 {
                                     if (!checkResults.CheckResultMap.ContainsKey(checkInfo))
                                         //add the check result for the current monitor
-                                        checkResults.CheckResultMap.Add(checkInfo, new CheckResult(true, String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState)));
+                                        checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.succeeded, String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState)));
                                     else
                                         //append the check result of the current monitor to the existing one
                                         checkResults.CheckResultMap[checkInfo].ResultInfo += String.Format(" ; {0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState);
@@ -706,7 +715,7 @@ namespace ReadinessTool
                             }//end foreach
 
                             //if there were no suitable monitors found add a negative check result
-                            if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, new CheckResult(false, "No suitable monitors found")); }
+                            if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = false; checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.failed, "No suitable monitors found")); }
 
                             if (!Silent)
                             {
@@ -726,18 +735,18 @@ namespace ReadinessTool
                             Console.WriteLine("\t" + e.GetType() + " " + e.Message);
                             Console.WriteLine(e.StackTrace);
                             //in case an error occurred add a negative check result
-                            if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, new CheckResult(false, "Check has failed. An unexpected error occurred")); }
+                            if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = false; checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.failed, "Check has failed. An unexpected error occurred")); }
                         }
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
                 #endregion
 
                 #region TOUCHSCREEN
                 //touch screen check
                 checkInfo = "TouchScreenCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "?");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -748,19 +757,19 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
                         ValidValue touchScreenExpected = checkValue.ValidValues.Find(item => item.name == "TouchScreenExpected");
                         if (touchScreenExpected != null)
                         {
-                            if (touchScreenExpected.value.ToLower().Equals("true")) { checkResult.Result = info.TouchEnabled == true;}
+                            if (touchScreenExpected.value.ToLower().Equals("true")) { if (info.TouchEnabled == true) checkResult.Result = ResultType.succeeded; }
                             checkResult.ResultInfo = String.Format("Touch screen enabled: {0} (expected: {1})", info.TouchEnabled, touchScreenExpected.value);
                         }
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
@@ -768,7 +777,7 @@ namespace ReadinessTool
                 //Audio checks
                 checkInfo = "AudioDevicesCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -779,7 +788,7 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
@@ -794,7 +803,7 @@ namespace ReadinessTool
 
                                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo))
                                     //add the check result for the current monitor
-                                    checkResults.CheckResultMap.Add(checkInfo, new CheckResult(true, String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status"))));
+                                    checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.succeeded, String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status"))));
                                 else
                                     //append the check result of the current monitor to the existing one
                                     checkResults.CheckResultMap[checkInfo].ResultInfo += String.Format(" ; Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status"));
@@ -820,12 +829,12 @@ namespace ReadinessTool
                         }
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
 
                 checkInfo = "AudioMidiToneCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "?");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -836,7 +845,7 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
@@ -850,7 +859,7 @@ namespace ReadinessTool
                                 midiOut.Send(MidiMessage.StopNote(60, 0, 1).RawData);
                                 Thread.Sleep(1000);
 
-                                checkResult.Result = true;
+                                checkResult.Result = ResultType.succeeded;
                                 checkResult.ResultInfo = "Midi tone was played successfully";
                             }
                         }
@@ -862,7 +871,7 @@ namespace ReadinessTool
                         }
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
@@ -871,7 +880,7 @@ namespace ReadinessTool
                 //internet access check
                 checkInfo = "NetworkConnectivityCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "?");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -882,7 +891,7 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped: " + checkInfo;
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
@@ -935,7 +944,7 @@ namespace ReadinessTool
                                     checkResult.ResultInfo += String.Format(" ; Ping of {0} failed", pingURL.value);
                                 }
 
-                                if (info.OpenReadSucces && info.PingSucces) checkResult.Result = true;
+                                if (info.OpenReadSucces && info.PingSucces) checkResult.Result = ResultType.succeeded;
                             }
 
                             if (!Silent)
@@ -947,7 +956,7 @@ namespace ReadinessTool
                         }
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
@@ -1022,7 +1031,7 @@ namespace ReadinessTool
                 //port check #1
                 checkInfo = "PortRangeAvailableCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "?");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -1033,7 +1042,7 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped";
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
@@ -1056,7 +1065,7 @@ namespace ReadinessTool
                                     if (!info.UsedPorts.Contains(i)) _freePorts++;
                                 }
 
-                                if(_freePorts >= _minimumPortsFree) checkResult.Result = true;
+                                if(_freePorts >= _minimumPortsFree) checkResult.Result = ResultType.succeeded;
 
                                 checkResult.ResultInfo = String.Format("{0} ports are available in the range of port {1} to port {2}", _freePorts, _firstPort, _lastPort);
 
@@ -1069,12 +1078,12 @@ namespace ReadinessTool
                         else { checkResult.ResultInfo += "Config data partly missing";}
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 //port check #2
                 checkInfo = "PortAvailableCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "?");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -1085,12 +1094,12 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped";
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
                         long _port = 0;
-                        checkResult.Result = true;
+                        checkResult.Result = ResultType.succeeded;
                         checkResult.ResultInfo = "";
                         foreach (ValidValue port in checkValue.ValidValues)
                         {
@@ -1098,7 +1107,7 @@ namespace ReadinessTool
                             {
                                 if (info.UsedPorts.Contains(_port))
                                 {
-                                    checkResult.Result = false;
+                                    checkResult.Result = ResultType.failed;
                                     checkResult.ResultInfo += String.Format(" port {0} not available;", _port);
                                 }
                                 else { checkResult.ResultInfo += String.Format(" port {0} available;", _port); }
@@ -1108,7 +1117,7 @@ namespace ReadinessTool
                         }
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
 
                 #endregion
@@ -1161,7 +1170,7 @@ namespace ReadinessTool
                 //folder writable check
                 checkInfo = "FoldersWritableCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "?");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -1172,12 +1181,12 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped";
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
                         string Executable = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
-                        checkResult.Result = true;
+                        checkResult.Result = ResultType.succeeded;
                         checkResult.ResultInfo = "";
                         foreach (ValidValue folder in checkValue.ValidValues)
                         {
@@ -1190,7 +1199,7 @@ namespace ReadinessTool
                                 checkResult.ResultInfo += String.Format("Folder {0}: ", folder.value);
                                 if (!HasWritePermissionOnDir(folder.value))
                                 {
-                                    checkResult.Result = false;
+                                    checkResult.Result = ResultType.failed;
                                     checkResult.ResultInfo += "NOK ";
                                 }else
                                     checkResult.ResultInfo += "OK ";
@@ -1205,12 +1214,12 @@ namespace ReadinessTool
                         }
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 //folder free space
                 checkInfo = "FoldersFreeSpaceCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "?");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -1221,12 +1230,12 @@ namespace ReadinessTool
                     if (!checkValue.RunThisCheck)
                     {
                         if (!Silent) Console.WriteLine("Test skipped: {0}", checkInfo);
-                        checkResult.ResultInfo += "Skipped";
+                        checkResult.Result = ResultType.skipped;
                     }
                     else
                     {
                         string Executable = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
-                        checkResult.Result = true;
+                        checkResult.Result = ResultType.succeeded;
                         checkResult.ResultInfo = "";
                         foreach (ValidValue folder in checkValue.ValidValues)
                         {
@@ -1258,7 +1267,7 @@ namespace ReadinessTool
                                     checkResult.ResultInfo += String.Format("Folder {0} free space {1}: ", folder.name, freeBytesOut);
                                     if (freeBytesOut <  expectedFreeBytes)
                                     {
-                                        checkResult.Result = false;
+                                        checkResult.Result = ResultType.failed;
                                         checkResult.ResultInfo += "NOK ";
                                     }
                                     else
@@ -1277,14 +1286,14 @@ namespace ReadinessTool
 
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
                 #region DRIVESPEED
                 checkInfo = "DriveSpeedCheck";
                 checkValue = null;
-                checkResult = new CheckResult(false, "");
+                checkResult = new CheckResult(ResultType.failed, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -1292,7 +1301,10 @@ namespace ReadinessTool
                 }
                 else
                 {
-                    if (checkValue.RunThisCheck) info.DoDriveSpeedTest = true;
+                    if (checkValue.RunThisCheck)
+                        info.DoDriveSpeedTest = true;
+                    else
+                        checkResult.Result = ResultType.skipped;
                 }
 
                 if (info.DoDriveSpeedTest)
@@ -1451,7 +1463,7 @@ namespace ReadinessTool
 
                             if (msr > -1 && msw > -1)
                             {
-                                if (info.ReadScore >= msr && info.WriteScore >= msw) checkResult.Result = true;
+                                if (info.ReadScore >= msr && info.WriteScore >= msw) checkResult.Result = ResultType.succeeded;
 
                                 checkResult.ResultInfo = String.Format("ReadScore: {0:0.00} (expected: {1}) WriteScore: {2:0.00} (expected: {3})",
                                     info.ReadScore,
@@ -1462,15 +1474,15 @@ namespace ReadinessTool
                         }
 
                     }
-                    if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
                 }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
                 #region REGISTRY
                 checkInfo = "RegistryKeyCheck";
                 checkValue = null;
-                checkResult = new CheckResult(true, "");
+                checkResult = new CheckResult(ResultType.succeeded, "");
 
                 if (!configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue))
                 {
@@ -1493,12 +1505,12 @@ namespace ReadinessTool
                                     string _result = (string)Registry.GetValue(_parts[0], _parts[1], "not set");
                                     if (_result != null)
                                     {
-                                        if (!_result.Equals(p.value)) checkResult.Result = false;
+                                        if (!_result.Equals(p.value)) checkResult.Result = ResultType.failed;
                                         checkResult.ResultInfo += String.Format("Key: {0} value {1} result {2} (expected:{3}) ", _parts[0], _parts[1], _result, p.value);
                                     }
                                     else
                                     {
-                                        checkResult.Result = false;
+                                        checkResult.Result = ResultType.failed;
                                         checkResult.ResultInfo += String.Format("Key: {0} value {1} undefined (expected:{2}) ", _parts[0], _parts[1], p.value);
                                     }
                                 }
@@ -1514,7 +1526,7 @@ namespace ReadinessTool
                         }
                     }
                 }
-                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 /*
                   List<string> RegistryKeys = new List<string>() { @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation" };
@@ -1630,6 +1642,54 @@ namespace ReadinessTool
                     }
                     catch { }
                 }
+
+                #endregion
+
+                #region WRITERESULTS
+
+                //write the results to the console
+
+                if (!Silent)
+                {
+                    if (checkResults.OverallResult)
+                        Console.ForegroundColor = ConsoleColor.Green;
+                    else
+                        Console.ForegroundColor = ConsoleColor.Red;
+
+                    Console.WriteLine("Overall check result is {0} See details below \n", checkResults.OverallResult);
+                    Console.ResetColor();
+
+
+                foreach (KeyValuePair<string, CheckResult> entry in checkResults.CheckResultMap)
+                    {
+
+                        if (entry.Value.Result == ResultType.succeeded) Console.ForegroundColor = ConsoleColor.Green;
+                        if (entry.Value.Result == ResultType.failed) Console.ForegroundColor = ConsoleColor.Red;
+                        if (entry.Value.Result == ResultType.skipped) Console.ForegroundColor = ConsoleColor.Gray;
+
+                        Console.WriteLine("{0} - {1} Info: {2}", entry.Value.Result, entry.Key, entry.Value.ResultInfo);
+                    }
+                    Console.ResetColor();
+                }
+
+                //write the results to a yaml file
+                StringBuilder sb = new StringBuilder();
+                StringWriter writer = new StringWriter(sb);
+
+                var serializer = new SerializerBuilder()
+                .Build();
+
+                serializer.Serialize(writer, checkResults);
+
+                using (StreamWriter streamWriter = new StreamWriter(resultFilePathYaml))
+                {
+                    streamWriter.Write(writer.ToString());
+                }
+
+                //write the results to a json file
+                
+                string jsonString = JsonSerializer.Serialize(checkResults);
+                File.WriteAllText(resultFilePathJson, jsonString);
 
                 #endregion
 

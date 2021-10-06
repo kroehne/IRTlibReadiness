@@ -365,20 +365,30 @@ namespace ReadinessTool
     public class CheckResult
     {
         public CheckResult() { }
-        public CheckResult(bool result, string resultInfo) { Result = result; ResultInfo = resultInfo; }
+        public CheckResult(ResultType result, string resultInfo) { Result = result; ResultInfo = resultInfo; }
         public string ResultInfo { get; set; }
-        public bool Result  { get; set; }
+        public ResultType Result  { get; set; }
     }
 
     public class CheckResults
     {
+
         public CheckResults()
         {
             CheckResultMap = new Dictionary<string, CheckResult>();
+            OverallResult = true;
         }
 
+        //public bool OverallResult;
+        public bool OverallResult { get; set; }
         public Dictionary<string, CheckResult> CheckResultMap { get; set; }
 
     }
 
+    public enum ResultType
+    {
+        failed,
+        succeeded,
+        skipped
+    }
 }

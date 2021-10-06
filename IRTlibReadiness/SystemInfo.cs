@@ -291,7 +291,7 @@ namespace ReadinessTool
 
             if (this.DoDriveSpeedTest)
             { 
-                _ret += String.Format("- Drive Speed: Read {0:0.00} MB/s, Write {0:0.00} MB/s\n", this.ReadScore, this.WriteScore);
+                _ret += String.Format("- Drive Speed: Read {0:0.00} MB/s, Write {1:0.00} MB/s\n", this.ReadScore, this.WriteScore);
                 foreach (var s in this.SpeedDetails)
                     _ret += "   " + s + "\n";
                 _ret += "\n";
