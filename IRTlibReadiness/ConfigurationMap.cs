@@ -73,6 +73,21 @@ namespace ReadinessTool
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
+            checkValueKey = "OperatingSystem64bitCheck";
+            if (!this.CheckRanges.ContainsKey(checkValueKey))
+            {
+                checkValue = new CheckValue
+                {
+                    PurposeInfo = "Checks if the operating system has 64bit architecture",
+                    OptionalCheck = false,
+                    RunThisCheck = true,
+                    ValidValues = new List<ValidValue>(),
+                    UnitInfo = ""
+                };
+                checkValue.ValidValues.Add(new ValidValue("is64bit", "true"));
+                this.CheckRanges.TryAdd(checkValueKey, checkValue);
+            }
+
             checkValueKey = "OperatingSystemTypeCheck";
             if (!this.CheckRanges.ContainsKey(checkValueKey))
             {
@@ -343,11 +358,20 @@ namespace ReadinessTool
     }
     public class CheckValue
     {
+        public CheckValue() { }
+
+        public CheckValue(bool runThisCheck, bool optionalCheck, string purposeInfo)
+        {
+            PurposeInfo = purposeInfo;
+            RunThisCheck = runThisCheck;
+            OptionalCheck = optionalCheck;
+            UnitInfo = "";
+            ValidValues = null;
+
+        }
         public string PurposeInfo { get; set; }
         public bool RunThisCheck { get; set; }
         public bool OptionalCheck { get; set; }
-        //public int Min { get; set; }
-        //public int Max { get; set; }
         public string UnitInfo { get; set; }
 
         public List<ValidValue> ValidValues { get; set; }
