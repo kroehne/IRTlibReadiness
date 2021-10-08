@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Management;
 using System.Text;
 
 namespace ReadinessTool
@@ -31,6 +33,7 @@ namespace ReadinessTool
         public string MachineName { get; set; }
         public string HostName { get; set; }
         public string OSVersion { get; set; }
+        public string OSName { get; set; }
         public bool Is64BitOS { get; set; }
         public bool Is64BitProcess { get; set; }
 
@@ -161,6 +164,11 @@ namespace ReadinessTool
             catch { HostName = "Unkown"; }
 
             OSVersion = Environment.OSVersion.ToString();
+
+            var osName = (from x in new ManagementObjectSearcher("SELECT Caption FROM Win32_OperatingSystem").Get().Cast<ManagementObject>()
+                        select x.GetPropertyValue("Caption")).FirstOrDefault();
+            OSName = osName != null ? osName.ToString() : "Unknown";
+
             Is64BitOS = Environment.Is64BitOperatingSystem;
             Is64BitProcess = Environment.Is64BitProcess;
             Executable = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
@@ -241,7 +249,7 @@ namespace ReadinessTool
             string _ret = "";
             _ret += String.Format("IRTlib: Readiness-Tool ({0})\n\n", this.Version);
             _ret += String.Format("- Machine: {0} (Hostname: {1})\n", this.MachineName, this.HostName);
-            _ret += String.Format("- System: {0} (64 bit OS: {1} / 64 bit Process: {2})\n", this.OSVersion, this.Is64BitOS, this.Is64BitProcess);
+            _ret += String.Format("- System: {0} \"{1}\" (64 bit OS: {2} / 64 bit Process: {3})\n", this.OSVersion, this.OSName, this.Is64BitOS, this.Is64BitProcess);
             _ret += String.Format("- CPU: {0} (Usage: {1} %)\n", this.CPUType, this.CPUUse);
             _ret += String.Format("- Memory: Total RAM = {0:0.00}Gb, Available RAM = {1:0.00}Gb\n", this.TotalRam / 1024 / 1024 / 1024, this.FreeRam / 1024 / 1024 / 1024);
             _ret += String.Format("- Touch Enabled Device: {0}\n", this.TouchEnabled);

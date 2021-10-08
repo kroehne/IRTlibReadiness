@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace ReadinessTool
 {
-
     public class ConfigurationMap
     {
 	    public ConfigurationMap()
@@ -82,9 +79,9 @@ namespace ReadinessTool
                     OptionalCheck = false,
                     RunThisCheck = true,
                     ValidValues = new List<ValidValue>(),
-                    UnitInfo = ""
+                    UnitInfo = "Is64bit , true|false"
                 };
-                checkValue.ValidValues.Add(new ValidValue("is64bit", "true"));
+                checkValue.ValidValues.Add(new ValidValue("Is64bit", "true"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
@@ -292,9 +289,9 @@ namespace ReadinessTool
                     OptionalCheck = false,
                     RunThisCheck = true,
                     ValidValues = new List<ValidValue>(),
-                    UnitInfo = "<FolderName> or one of [USERTEMPFOLDER, ROOTDRIVE], expected free space in kB"
+                    UnitInfo = "<FolderName> or one of [USERTEMPFOLDER, ROOTDRIVE], expected free space in MB"
                 };
-                checkValue.ValidValues.Add(new ValidValue("C:\\Users\\<USER>\\AppData\\Local\\Temp\\", "512"));
+                checkValue.ValidValues.Add(new ValidValue("C:\\Users\\<USER>\\AppData\\Local\\Temp\\", "500"));
                 checkValue.ValidValues.Add(new ValidValue("C:\\", "1024"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
@@ -310,8 +307,8 @@ namespace ReadinessTool
                     ValidValues = new List<ValidValue>(),
                     UnitInfo = "MB/s"
                 };
-                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedRead", "25"));
-                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedWrite", "25"));
+                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedRead", "100"));
+                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedWrite", "100"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
@@ -342,6 +339,22 @@ namespace ReadinessTool
                 };
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
+
+            checkValueKey = "ExternalSoftwareCheck";
+            if (!this.CheckRanges.ContainsKey(checkValueKey))
+            {
+                checkValue = new CheckValue
+                {
+                    PurposeInfo = "Checks for external programs to exist",
+                    OptionalCheck = false,
+                    RunThisCheck = true,
+                    ValidValues = new List<ValidValue>(),
+                    UnitInfo = "Folder , Program file name"
+                };
+                checkValue.ValidValues.Add(new ValidValue("", "TestApp.Player.Chromely.exe"));
+                this.CheckRanges.TryAdd(checkValueKey, checkValue);
+            }
+
             //Check values -
             #endregion
 
@@ -358,7 +371,10 @@ namespace ReadinessTool
     }
     public class CheckValue
     {
-        public CheckValue() { }
+        public CheckValue() 
+        {
+            ValidValues = new List<ValidValue>();
+        }
 
         public CheckValue(bool runThisCheck, bool optionalCheck, string purposeInfo)
         {
@@ -366,7 +382,7 @@ namespace ReadinessTool
             RunThisCheck = runThisCheck;
             OptionalCheck = optionalCheck;
             UnitInfo = "";
-            ValidValues = null;
+            ValidValues = new List<ValidValue>();
 
         }
         public string PurposeInfo { get; set; }

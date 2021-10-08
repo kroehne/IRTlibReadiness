@@ -97,7 +97,7 @@ namespace ReadinessTool
             SystemInfo info = new SystemInfo()
             {
                 TotalRam = (double)RamDiskUtil.TotalRam,
-                FreeRam = (double)RamDiskUtil.FreeRam,
+                FreeRam = (double)RamDiskUtil.FreeRam
                 //the flags below are initialized to false, the setting is retrieved from the
                 //assigned CheckValue section within the yaml file
                 //DoDriveSpeedTest = args.Length == 0,
@@ -106,6 +106,15 @@ namespace ReadinessTool
                 //assigned Parameter section within the yaml file or from the parameter applied (see below)
                 //DoApplicationStartAfterCheck = args.Length != 0
             };
+
+            //get the Player's folder and file name from the config otherwise keep the initial values
+            CheckValue checkValuePlayer = null;
+            checkValuePlayer = configurationMap.CheckRanges.TryGetValue("ExternalSoftwareCheck", out checkValuePlayer) ? checkValuePlayer : new CheckValue(false, false, "Config data missing");
+            if(checkValuePlayer.ValidValues.Count > 0)
+            {
+                info.AppFolder = checkValuePlayer.ValidValues[0].name;
+                info.AppName = checkValuePlayer.ValidValues[0].value;
+            }
 
             //later the two if statements below can be removed
             if (configurationMap.CheckRanges.TryGetValue("ReadinessDriveSpeedCheck", out checkValue))
@@ -373,12 +382,69 @@ namespace ReadinessTool
                 {
                     Console.ForegroundColor = ConsoleColor.White;
                     Console.WriteLine(" - Machine: {0} (Hostname: {1})", info.MachineName, info.HostName);
-                    Console.WriteLine(" - System: {0} (64 bit OS: {1} / 64 bit Process: {2})", info.OSVersion, info.Is64BitOS, info.Is64BitProcess);
+                    Console.WriteLine(" - System: {0} \"{1}\" (64 bit OS: {2} / 64 bit Process: {3})", info.OSVersion, info.OSName, info.Is64BitOS, info.Is64BitProcess);
                     Console.WriteLine(" - CPU: {0} (Usage: {1} %)", info.CPUType, info.CPUUse);
                     Console.WriteLine(" - Memory: Total RAM = {0:0.00}Gb, Available RAM = {1:0.00}Gb", info.TotalRam / 1024 / 1024 / 1024, info.FreeRam / 1024 / 1024 / 1024);
                     Console.WriteLine(" - Touch Enabled Device: {0}", info.TouchEnabled);
                     Console.ResetColor();
                 }
+                #endregion
+
+                #region OS
+                //OS check #1
+                checkInfo = "OperatingSystemCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+                    string validVals = "";
+                    foreach (ValidValue vv in checkValue.ValidValues)
+                    {
+                        if(info.OSName.Contains(vv.value)) checkResult.Result = ResultType.succeeded;
+                        validVals += String.Format("{0} ", vv.value);
+                    }
+
+                    checkResult.ResultInfo += String.Format("OS name is \"{0}\" (expected: {1})",info.OSName, validVals);
+
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                //OS check #2
+                checkInfo = "OperatingSystem64bitCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+
+                    ValidValue vv = checkValue.ValidValues.Find(item => item.name == "Is64bit");
+
+                    if (vv != null)
+                    {
+                        if (vv.value.ToLower().Equals("true"))
+                        {
+                            if (info.Is64BitOS) checkResult.Result = ResultType.succeeded;
+                        }
+                        checkResult.ResultInfo += String.Format(" 64bitOS is {0} (expected: {1})", info.Is64BitOS, vv.value);
+                    }
+                    else
+                        checkResult.ResultInfo = "Config data incomplete";
+
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
                 #endregion
 
                 #region MEMORY
@@ -396,7 +462,8 @@ namespace ReadinessTool
                 else
                 {
                     ValidValue minimalMemoryInstalled = checkValue.ValidValues.Find(item => item.name == "MinimalMemoryInstalled");
-                    if(minimalMemoryInstalled != null)
+
+                    if (minimalMemoryInstalled != null)
                     {
                         try
                         {
@@ -500,16 +567,20 @@ namespace ReadinessTool
                                 }
                             }
 
-                            if (checkResult != null)
-                            {
-                                string role = "";
-                                if (info.IsAdministrator) role = "Administrator";
-                                if (info.IsUser) role = "User";
-                                if (info.IsGuest) role = "Guest";
+                            string role = "";
+                            if (info.IsAdministrator) role = "Administrator";
+                            if (info.IsUser) role = "User";
+                            if (info.IsGuest) role = "Guest";
 
-                                if (checkValue.ValidValues.Exists(item => item.value == role)) checkResult.Result = ResultType.succeeded;
-                                checkResult.ResultInfo = "Current users role is: " + role;
+                            if (checkValue.ValidValues.Exists(item => item.value == role)) checkResult.Result = ResultType.succeeded;
+                            checkResult.ResultInfo = "Current users role is: " + role;
+
+                            string validRoles = "";
+                            foreach (ValidValue vv in checkValue.ValidValues)
+                            {
+                                validRoles += String.Format("{0} ", vv.value);
                             }
+                            checkResult.ResultInfo += String.Format(" (expected: {0})", validRoles);
                         }
                     }
                     catch (Exception e)
@@ -521,7 +592,6 @@ namespace ReadinessTool
                     }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
-
                 #endregion
 
                 #region VIRUS
@@ -706,11 +776,12 @@ namespace ReadinessTool
                         }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                checkResults.CheckResultMap[checkInfo].ResultInfo +=String.Format(" (expected: {0}, {1})", info.MinimalWidth, info.MinimalHeight);
                 #endregion
 
                 #region TOUCHSCREEN
-                //touch screen check
-                checkInfo = "TouchScreenCheck";
+               //touch screen check
+               checkInfo = "TouchScreenCheck";
                 checkResult = new CheckResult(ResultType.failed, "");
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
@@ -919,7 +990,6 @@ namespace ReadinessTool
                             info.UsedPorts.Add(c.LocalEndPoint.Port);
                     }
 
-
                     if (!Silent)
                     {
                         Console.ForegroundColor = ConsoleColor.White;
@@ -966,7 +1036,6 @@ namespace ReadinessTool
                     Console.WriteLine(e.StackTrace);
                 }
 
-
                 //port checks
 
                 //port check #1
@@ -1004,9 +1073,9 @@ namespace ReadinessTool
                                 if(_freePorts >= _minimumPortsFree) checkResult.Result = ResultType.succeeded;
 
                                 checkResult.ResultInfo = String.Format("{0} ports are available in the range of port {1} to port {2}", _freePorts, _firstPort, _lastPort);
-
-                            }
-                            else
+                                checkResult.ResultInfo += String.Format(" (expected: minimum {0} available ports)", _minimumPortsFree);
+                        }
+                        else
                             {
                                 checkResult.ResultInfo += "Wrong config value format: ";
                             }
@@ -1028,23 +1097,23 @@ namespace ReadinessTool
                 }
                 else
                 {
-                        long _port = 0;
-                        checkResult.Result = ResultType.succeeded;
-                        checkResult.ResultInfo = "";
-                        foreach (ValidValue port in checkValue.ValidValues)
+                    long _port = 0;
+                    checkResult.Result = ResultType.succeeded;
+                    checkResult.ResultInfo = "";
+                    foreach (ValidValue port in checkValue.ValidValues)
+                    {
+                        if (long.TryParse(port.value, out _port))
                         {
-                            if (long.TryParse(port.value, out _port))
+                            if (info.UsedPorts.Contains(_port))
                             {
-                                if (info.UsedPorts.Contains(_port))
-                                {
-                                    checkResult.Result = ResultType.failed;
-                                    checkResult.ResultInfo += String.Format(" port {0} not available;", _port);
-                                }
-                                else { checkResult.ResultInfo += String.Format(" port {0} available;", _port); }
-
+                                checkResult.Result = ResultType.failed;
+                                checkResult.ResultInfo += String.Format(" port {0} not available;", _port);
                             }
-                            else { checkResult.ResultInfo += String.Format(" Wrong format: port {0};", port.value); }
+                            else { checkResult.ResultInfo += String.Format(" port {0} available;", _port); }
+
                         }
+                        else { checkResult.ResultInfo += String.Format(" Wrong format: port {0};", port.value); }
+                    }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
@@ -1108,33 +1177,33 @@ namespace ReadinessTool
                 }
                 else
                 {
-                        string Executable = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
-                        checkResult.Result = ResultType.succeeded;
-                        checkResult.ResultInfo = "";
-                        foreach (ValidValue folder in checkValue.ValidValues)
-                        {
-                            if (folder.value.Contains("<USER>")) { folder.value = folder.value.Replace("<USER>", Environment.UserName.ToString()); };
-                            if (folder.value.ToUpper().Equals("USERTEMPFOLDER")) { folder.value = Path.GetTempPath(); };
-                            if (folder.value.ToUpper().Equals("ROOTDRIVE")) { folder.value = System.IO.Path.GetPathRoot(Executable); };
+                    string Executable = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                    checkResult.Result = ResultType.succeeded;
+                    checkResult.ResultInfo = "";
+                    foreach (ValidValue folder in checkValue.ValidValues)
+                    {
+                        if (folder.value.Contains("<USER>")) { folder.value = folder.value.Replace("<USER>", Environment.UserName.ToString()); };
+                        if (folder.value.ToUpper().Equals("USERTEMPFOLDER")) { folder.value = Path.GetTempPath(); };
+                        if (folder.value.ToUpper().Equals("ROOTDRIVE")) { folder.value = System.IO.Path.GetPathRoot(Executable); };
 
-                            try
+                        try
+                        {
+                            checkResult.ResultInfo += String.Format("Folder {0}: ", folder.value);
+                            if (!HasWritePermissionOnDir(folder.value))
                             {
-                                checkResult.ResultInfo += String.Format("Folder {0}: ", folder.value);
-                                if (!HasWritePermissionOnDir(folder.value))
-                                {
-                                    checkResult.Result = ResultType.failed;
-                                    checkResult.ResultInfo += "NOK ";
-                                }else
-                                    checkResult.ResultInfo += "OK ";
-                            }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine("\nChecking write permission failed with an unexpected error:");
-                                Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                                Console.WriteLine(e.StackTrace);
-                                checkResult.ResultInfo += " Checking write permission failed ";
-                            }
+                                checkResult.Result = ResultType.failed;
+                                checkResult.ResultInfo += "NOK ";
+                            }else
+                                checkResult.ResultInfo += "OK ";
                         }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("\nChecking write permission failed with an unexpected error:");
+                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                            Console.WriteLine(e.StackTrace);
+                            checkResult.ResultInfo += " Checking write permission failed ";
+                        }
+                    }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
@@ -1163,11 +1232,29 @@ namespace ReadinessTool
                             try
                             {
                                 long freeBytesOut = 0;
-                                long expectedFreeBytes = 0;
+                                long expectedFreeMB = 0;
 
                                 try
                                 {
-                                    expectedFreeBytes = Convert.ToInt32(folder.value) * 1024;
+                                    expectedFreeMB = Convert.ToInt32(folder.value);//MB
+                                    if (NativeMethods.GetDiskFreeSpaceEx(folder.name, out freeBytesOut, out var _1, out var _2))//bytes
+                                    {
+                                        long freeMB = freeBytesOut / 1024 / 1024;
+                                        checkResult.ResultInfo += String.Format("Folder {0} free space {1}MB: ", folder.name, freeMB);
+                                        if (freeMB < expectedFreeMB)
+                                        {
+                                            checkResult.Result = ResultType.failed;
+                                            checkResult.ResultInfo += "NOK ";
+                                        }
+                                        else
+                                            checkResult.ResultInfo += "OK ";
+
+                                        checkResult.ResultInfo += String.Format(" (expected: {0}MB) ", expectedFreeMB);
+
+                                }
+                                else
+                                        checkResult.ResultInfo += "getting free space failed ";
+
                                 }
                                 catch (OverflowException)
                                 {
@@ -1176,21 +1263,8 @@ namespace ReadinessTool
                                 catch (FormatException)
                                 {
                                     Console.WriteLine("The {0} value is not in a recognizable format.",
-                                                      folder.value.GetType().Name);
+                                                        folder.value.GetType().Name);
                                 }
-
-                                if (NativeMethods.GetDiskFreeSpaceEx(folder.name, out freeBytesOut, out var _1, out var _2))
-                                { 
-                                    checkResult.ResultInfo += String.Format("Folder {0} free space {1}: ", folder.name, freeBytesOut);
-                                    if (freeBytesOut <  expectedFreeBytes)
-                                    {
-                                        checkResult.Result = ResultType.failed;
-                                        checkResult.ResultInfo += "NOK ";
-                                    }
-                                    else
-                                        checkResult.ResultInfo += "OK ";
-                                }else
-                                    checkResult.ResultInfo += "getting free space failed ";
                             }
                             catch (Exception e)
                             {
@@ -1610,8 +1684,6 @@ namespace ReadinessTool
                 Console.WriteLine("\t" + ex.GetType() + " " + ex.Message);
                 Console.WriteLine(ex.StackTrace);
             }
-
-           
         }
 
         public static bool HasWritePermissionOnDir(string path)
