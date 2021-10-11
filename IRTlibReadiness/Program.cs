@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Management;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -43,6 +44,7 @@ namespace ReadinessTool
 
             string strExeFilePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
             string strWorkPath = System.IO.Path.GetDirectoryName(strExeFilePath);
+            string strOutputPath = System.IO.Path.GetDirectoryName(strExeFilePath);
 
             string configFileNameYaml = @"ReadinessConfig.yaml";
             string configFileNameJson = @"ReadinessConfig.json";
@@ -51,8 +53,9 @@ namespace ReadinessTool
 
             string resultFileNameYaml = @"ReadinessResult.yaml";
             string resultFileNameJson = @"ReadinessResult.json";
-            string resultFilePathYaml = System.IO.Path.Combine(strWorkPath, resultFileNameYaml);
-            string resultFilePathJson = System.IO.Path.Combine(strWorkPath, resultFileNameJson);
+            //the output path of the results may be affected by the parameter later
+            string resultFilePathYaml = System.IO.Path.Combine(strOutputPath, resultFileNameYaml);
+            string resultFilePathJson = System.IO.Path.Combine(strOutputPath, resultFileNameJson);
 
             ConfigurationMap configurationMap = new ConfigurationMap();
             CheckResults checkResults = new CheckResults();
@@ -76,7 +79,6 @@ namespace ReadinessTool
                     streamWriter.Write(writer.ToString());
                 }
                 Console.WriteLine("Default config data was saved successfully to file: " + configFilePathYaml);
-
             }
             else
             {
@@ -87,7 +89,7 @@ namespace ReadinessTool
                 .Build();
 
                 configurationMap = deserializer.Deserialize<ConfigurationMap>(stringReader);
-                Console.WriteLine("Config data was successfully read from file: " + configFilePathYaml);
+                //Console.WriteLine("Config data was successfully read from file: " + configFilePathYaml);
 
                 //if there were missing parameters or check values complete the map by adding defaults
                 //configurationMap.SetDefaults();
@@ -137,7 +139,36 @@ namespace ReadinessTool
             {
                 Silent = parameterValue.Value.ToLower() == "silent";
                 Verbose = parameterValue.Value.ToLower() == "verbose";
-                //otherwise both values are false
+                //otherwise both values are false (default setting "normal")
+            }
+            
+            if (configurationMap.Parameters.TryGetValue("ReadinessOutputFolder", out parameterValue))
+            {
+                if(parameterValue.Value.Length != 0) 
+                {
+                    string strOutputPathTemp = parameterValue.Value;
+                    if (parameterValue.Value.ToUpper().Equals("USERTEMPFOLDER")) { strOutputPathTemp = Path.GetTempPath(); };
+
+                    if (Directory.Exists(strOutputPathTemp))
+                    {
+                        if (HasWritePermissionOnDir(strOutputPathTemp))
+                        {
+
+                            strOutputPath = strOutputPathTemp;
+                            resultFilePathYaml = System.IO.Path.Combine(strOutputPath, resultFileNameYaml);
+                            resultFilePathJson = System.IO.Path.Combine(strOutputPath, resultFileNameJson);
+                        }
+                        else
+                        {
+                            Console.WriteLine(String.Format("Could not set the output to: {0} - folder not writable\n0utput written to {1}", strOutputPathTemp, strOutputPath));
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine(String.Format("Could not set the output to: {0} - folder doesn't exist\n0utput written to {1}", strOutputPathTemp, strOutputPath));
+                    }
+                }
+                //otherwise the initial values (all files are written to the app folder) are valid
             }
             #endregion
 
@@ -343,7 +374,7 @@ namespace ReadinessTool
                         }
                         catch (Exception e)
                         {
-                            Console.WriteLine("\n Lunching the player failed with an unexpected error:");
+                            Console.WriteLine("\n Launching the player failed with an unexpected error:");
                             Console.WriteLine("\t" + e.GetType() + " " + e.Message);
                             Console.WriteLine(e.StackTrace);
                             info.PlayerStarted = false;
@@ -796,8 +827,8 @@ namespace ReadinessTool
                         ValidValue touchScreenExpected = checkValue.ValidValues.Find(item => item.name == "TouchScreenExpected");
                         if (touchScreenExpected != null)
                         {
-                            if (touchScreenExpected.value.ToLower().Equals("true")) { if (info.TouchEnabled == true) checkResult.Result = ResultType.succeeded; }
-                            checkResult.ResultInfo = String.Format("Touch screen enabled: {0} (expected: {1})", info.TouchEnabled, touchScreenExpected.value);
+                            if (touchScreenExpected.value.ToLower().Equals("true")) { if (info.HasTouch == true) checkResult.Result = ResultType.succeeded; }
+                            checkResult.ResultInfo = String.Format("Touch screen present: {0} (expected: {1}) - Enabled info: {2}", info.HasTouch, touchScreenExpected.value, info.TouchEnabled);
                         }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
@@ -1323,7 +1354,7 @@ namespace ReadinessTool
                                         Console.Write("\n   * {0}/{1} {2}", bigTest.CompletedTests + 1, bigTest.TotalTests, (sender as Test).DisplayName);
                                 }
 
-                                ClearLine(curCursor);
+                                if(!Silent) ClearLine(curCursor);
 
                                 if (e.Status != TestStatus.Completed)
                                 {
@@ -1389,7 +1420,7 @@ namespace ReadinessTool
                                     info.DoDriveSpeedTest = false;
                                 }
 
-                                ShowCounters(bigTest);
+                                if(!Silent) ShowCounters(bigTest);
                             };
 
                             var results = bigTest.Execute();
@@ -1611,10 +1642,12 @@ namespace ReadinessTool
 
                 #region WRITE INFO
                 string _fileName = "Readiness_" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".txt";
+                string _filePath = System.IO.Path.Combine(strOutputPath, _fileName);
 
                 try
                 {
-                    File.WriteAllText(_fileName, info.ToString());
+                    File.WriteAllText(_filePath, info.ToString());
+                    if (!Silent) { Console.WriteLine("Report written to file " + _filePath); }
                 }
                 catch { }
 
@@ -1622,7 +1655,7 @@ namespace ReadinessTool
                 {
                     try
                     {
-                        Process.Start("notepad.exe", _fileName);
+                        Process.Start("notepad.exe", _filePath);
                     }
                     catch { }
                 }
@@ -1669,11 +1702,13 @@ namespace ReadinessTool
                 {
                     streamWriter.Write(writer.ToString());
                 }
+                if (!Silent) { Console.WriteLine("Result file written to file " + resultFilePathYaml); }
 
                 //write the results to a json file
-                
+
                 string jsonString = JsonSerializer.Serialize(checkResults);
                 File.WriteAllText(resultFilePathJson, jsonString);
+                if (!Silent) { Console.WriteLine("Result file written to file " + resultFilePathJson); }
 
                 #endregion
 
@@ -1752,6 +1787,7 @@ namespace ReadinessTool
 
         private static void ShowCounters(TestSuite ts)
         {
+
             var left = Console.CursorLeft;
             var top = Console.CursorTop;
             var elapsedSecs = ts.ElapsedMs / 1000;
@@ -1826,7 +1862,6 @@ namespace ReadinessTool
             }
         }
     }
-
     
     public static class NativeMethods
     {

@@ -37,8 +37,18 @@ namespace ReadinessTool
             {
                 parameterValue = new ParameterValue();
                 parameterValue.PurposeInfo = "Output of the Readiness tool";
-                parameterValue.AllowedValuesInfo = new string[2] { "silent", "verbose" };
-                parameterValue.Value = "verbose";
+                parameterValue.AllowedValuesInfo = new string[3] { "silent", "normal", "verbose" };
+                parameterValue.Value = "normal";
+                this.Parameters.Add(parameterKey, parameterValue);
+            }
+
+            parameterKey = "ReadinessOutputFolder";
+            if (!this.Parameters.ContainsKey(parameterKey))
+            {
+                parameterValue = new ParameterValue();
+                parameterValue.PurposeInfo = "Output of the Readiness tool";
+                parameterValue.AllowedValuesInfo = new string[3] { "Folder name", "USERTEMPFOLDER", "keep empty for the app folder" };
+                parameterValue.Value = "";
                 this.Parameters.Add(parameterKey, parameterValue);
             }
 

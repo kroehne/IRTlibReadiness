@@ -45,6 +45,7 @@ namespace ReadinessTool
         public string CPUUse { get; set; }
         public string CPUType { get; set; }
         public bool TouchEnabled { get; set; }
+        public bool HasTouch { get; set; }
         public string Version { get; set; }
         #endregion
 
@@ -129,6 +130,14 @@ namespace ReadinessTool
 
             return maxTouches > 0;
         }
+        public static bool HasTouchDevice()
+        {
+            bool hasTouch = Windows.Devices.Input
+                          .PointerDevice.GetPointerDevices()
+                          .Any(p => p.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Touch);
+
+            return hasTouch;
+        }
         #endregion
 
         #region WMIC helper
@@ -175,6 +184,7 @@ namespace ReadinessTool
             RootDrive = System.IO.Path.GetPathRoot(Executable);
             Version = GetType().Assembly.GetName().Version.ToString();
             TouchEnabled = IsTouchEnabled();
+            HasTouch = HasTouchDevice();
             TotalMemorySystem = "";
             FreeMemorySystem = "";
             CPUUse = "";
@@ -252,7 +262,7 @@ namespace ReadinessTool
             _ret += String.Format("- System: {0} \"{1}\" (64 bit OS: {2} / 64 bit Process: {3})\n", this.OSVersion, this.OSName, this.Is64BitOS, this.Is64BitProcess);
             _ret += String.Format("- CPU: {0} (Usage: {1} %)\n", this.CPUType, this.CPUUse);
             _ret += String.Format("- Memory: Total RAM = {0:0.00}Gb, Available RAM = {1:0.00}Gb\n", this.TotalRam / 1024 / 1024 / 1024, this.FreeRam / 1024 / 1024 / 1024);
-            _ret += String.Format("- Touch Enabled Device: {0}\n", this.TouchEnabled);
+            _ret += String.Format("- Touch Enabled: {0} Has Touch device: {1}\n", this.TouchEnabled, this.HasTouch);
             _ret += String.Format("- Current User: {0} (Roles: Administrator = {1}, User = {2}, Guest = {3})\n", this.UserName, this.IsAdministrator, this.IsUser, this.IsGuest);
 
             _ret += "\n";
