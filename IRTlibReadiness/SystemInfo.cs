@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Management;
 using System.Text;
 
 namespace ReadinessTool
@@ -8,12 +10,15 @@ namespace ReadinessTool
     public class SystemInfo
     {
         #region JOB
-        public bool DoDriveSpeedTest = true;
-        public bool DoAudioCheck = true;
-        public bool DoPortScan = true;
-        public bool DoApplicationStartAfterCheck = true;
+        //Parameters
+        public bool DoApplicationStartAfterCheck = false;
         public bool DoApplicationStartBeforeCheck = false;
 
+        public bool DoDriveSpeedTest = false;
+        public bool DoAudioCheck = false;
+        public bool DoPortScan = false;
+
+        //Check configuration
         public int StartScanMin = 8001;
         public int RequiredNumberOfPorts = 2;
         public int NumberOfPortsToCheck = 1000;
@@ -28,6 +33,7 @@ namespace ReadinessTool
         public string MachineName { get; set; }
         public string HostName { get; set; }
         public string OSVersion { get; set; }
+        public string OSName { get; set; }
         public bool Is64BitOS { get; set; }
         public bool Is64BitProcess { get; set; }
 
@@ -39,6 +45,7 @@ namespace ReadinessTool
         public string CPUUse { get; set; }
         public string CPUType { get; set; }
         public bool TouchEnabled { get; set; }
+        public bool HasTouch { get; set; }
         public string Version { get; set; }
         #endregion
 
@@ -123,6 +130,14 @@ namespace ReadinessTool
 
             return maxTouches > 0;
         }
+        public static bool HasTouchDevice()
+        {
+            bool hasTouch = Windows.Devices.Input
+                          .PointerDevice.GetPointerDevices()
+                          .Any(p => p.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Touch);
+
+            return hasTouch;
+        }
         #endregion
 
         #region WMIC helper
@@ -158,12 +173,18 @@ namespace ReadinessTool
             catch { HostName = "Unkown"; }
 
             OSVersion = Environment.OSVersion.ToString();
+
+            var osName = (from x in new ManagementObjectSearcher("SELECT Caption FROM Win32_OperatingSystem").Get().Cast<ManagementObject>()
+                        select x.GetPropertyValue("Caption")).FirstOrDefault();
+            OSName = osName != null ? osName.ToString() : "Unknown";
+
             Is64BitOS = Environment.Is64BitOperatingSystem;
             Is64BitProcess = Environment.Is64BitProcess;
             Executable = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
             RootDrive = System.IO.Path.GetPathRoot(Executable);
             Version = GetType().Assembly.GetName().Version.ToString();
             TouchEnabled = IsTouchEnabled();
+            HasTouch = HasTouchDevice();
             TotalMemorySystem = "";
             FreeMemorySystem = "";
             CPUUse = "";
@@ -238,10 +259,10 @@ namespace ReadinessTool
             string _ret = "";
             _ret += String.Format("IRTlib: Readiness-Tool ({0})\n\n", this.Version);
             _ret += String.Format("- Machine: {0} (Hostname: {1})\n", this.MachineName, this.HostName);
-            _ret += String.Format("- System: {0} (64 bit OS: {1} / 64 bit Process: {2})\n", this.OSVersion, this.Is64BitOS, this.Is64BitProcess);
+            _ret += String.Format("- System: {0} \"{1}\" (64 bit OS: {2} / 64 bit Process: {3})\n", this.OSVersion, this.OSName, this.Is64BitOS, this.Is64BitProcess);
             _ret += String.Format("- CPU: {0} (Usage: {1} %)\n", this.CPUType, this.CPUUse);
             _ret += String.Format("- Memory: Total RAM = {0:0.00}Gb, Available RAM = {1:0.00}Gb\n", this.TotalRam / 1024 / 1024 / 1024, this.FreeRam / 1024 / 1024 / 1024);
-            _ret += String.Format("- Touch Enabled Device: {0}\n", this.TouchEnabled);
+            _ret += String.Format("- Touch Enabled: {0} Has Touch device: {1}\n", this.TouchEnabled, this.HasTouch);
             _ret += String.Format("- Current User: {0} (Roles: Administrator = {1}, User = {2}, Guest = {3})\n", this.UserName, this.IsAdministrator, this.IsUser, this.IsGuest);
 
             _ret += "\n";
@@ -288,7 +309,7 @@ namespace ReadinessTool
 
             if (this.DoDriveSpeedTest)
             { 
-                _ret += String.Format("- Drive Speed: Read {0:0.00} MB/s, Write {0:0.00} MB/s\n", this.ReadScore, this.WriteScore);
+                _ret += String.Format("- Drive Speed: Read {0:0.00} MB/s, Write {1:0.00} MB/s\n", this.ReadScore, this.WriteScore);
                 foreach (var s in this.SpeedDetails)
                     _ret += "   " + s + "\n";
                 _ret += "\n";

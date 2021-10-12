@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Management;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -13,7 +14,10 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
+using YamlDotNet.Serialization;
 
 /*
  *  Sapling.StorageSpeedMeter based on: https://github.com/maxim-saplin/NetCoreStorageSpeedTest (MIT License)
@@ -31,18 +35,148 @@ namespace ReadinessTool
              
             List<string> RegistryKeys = new List<string>() { @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation" };
 
+            #region ConfigurationData
+
+            string checkInfo = "";
+            CheckValue checkValue = null;
+            CheckResult checkResult = null;
+            ParameterValue parameterValue = null;
+
+            string strExeFilePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string strWorkPath = System.IO.Path.GetDirectoryName(strExeFilePath);
+            string strOutputPath = System.IO.Path.GetDirectoryName(strExeFilePath);
+
+            string configFileNameYaml = @"ReadinessConfig.yaml";
+            string configFileNameJson = @"ReadinessConfig.json";
+            string configFilePathYaml = System.IO.Path.Combine(strWorkPath, configFileNameYaml);
+            string configFilePathJson = System.IO.Path.Combine(strWorkPath, configFileNameJson);
+
+            string resultFileNameYaml = @"ReadinessResult.yaml";
+            string resultFileNameJson = @"ReadinessResult.json";
+            //the output path of the results may be affected by the parameter later
+            string resultFilePathYaml = System.IO.Path.Combine(strOutputPath, resultFileNameYaml);
+            string resultFilePathJson = System.IO.Path.Combine(strOutputPath, resultFileNameJson);
+
+            ConfigurationMap configurationMap = new ConfigurationMap();
+            CheckResults checkResults = new CheckResults();
+
+            if (!File.Exists(configFilePathYaml))
+            {
+                //no config file so set the defaults and create a config file
+                configurationMap.SetDefaults();
+
+                StringBuilder sb = new StringBuilder();
+                StringWriter writer = new StringWriter(sb);
+
+                var serializer = new SerializerBuilder()
+                .Build();
+
+                //serialize the defaults to a new config file
+                serializer.Serialize(writer, configurationMap);
+
+                using (StreamWriter streamWriter = new StreamWriter(configFilePathYaml))
+                {
+                    streamWriter.Write(writer.ToString());
+                }
+                Console.WriteLine("Default config data was saved successfully to file: " + configFilePathYaml);
+            }
+            else
+            {
+                string configDataAsText = File.ReadAllText(configFilePathYaml);
+                StringReader stringReader = new StringReader(configDataAsText);
+
+                var deserializer = new DeserializerBuilder()
+                .Build();
+
+                configurationMap = deserializer.Deserialize<ConfigurationMap>(stringReader);
+                //Console.WriteLine("Config data was successfully read from file: " + configFilePathYaml);
+
+                //if there were missing parameters or check values complete the map by adding defaults
+                //configurationMap.SetDefaults();
+            }
+            #endregion
+
             SystemInfo info = new SystemInfo()
             {
                 TotalRam = (double)RamDiskUtil.TotalRam,
-                FreeRam = (double)RamDiskUtil.FreeRam,
-                DoDriveSpeedTest = args.Length == 0,
-                DoPortScan = args.Length == 0,
-                DoApplicationStartAfterCheck = args.Length != 0
+                FreeRam = (double)RamDiskUtil.FreeRam
+                //the flags below are initialized to false, the setting is retrieved from the
+                //assigned CheckValue section within the yaml file
+                //DoDriveSpeedTest = args.Length == 0,
+                //DoPortScan = args.Length == 0,
+                //the flag below is initialized to false, the setting is retrieved from the
+                //assigned Parameter section within the yaml file or from the parameter applied (see below)
+                //DoApplicationStartAfterCheck = args.Length != 0
             };
+
+            //get the Player's folder and file name from the config otherwise keep the initial values
+            CheckValue checkValuePlayer = null;
+            checkValuePlayer = configurationMap.CheckRanges.TryGetValue("ExternalSoftwareCheck", out checkValuePlayer) ? checkValuePlayer : new CheckValue(false, false, "Config data missing");
+            if(checkValuePlayer.ValidValues.Count > 0)
+            {
+                info.AppFolder = checkValuePlayer.ValidValues[0].name;
+                info.AppName = checkValuePlayer.ValidValues[0].value;
+            }
+
+            //later the two if statements below can be removed
+            if (configurationMap.CheckRanges.TryGetValue("ReadinessDriveSpeedCheck", out checkValue))
+            {
+                info.DoDriveSpeedTest = checkValue.RunThisCheck;
+            }
+            if (configurationMap.CheckRanges.TryGetValue("PortAvailableCheck", out checkValue))
+            {
+                info.DoPortScan = checkValue.RunThisCheck;
+            }
+
+            #region setParametersFromYamlFile
+            if (configurationMap.Parameters.TryGetValue("ReadinessStartPlayer", out parameterValue))
+            {
+                info.DoApplicationStartBeforeCheck = parameterValue.Value.ToLower() == "startbefore";
+                info.DoApplicationStartAfterCheck = parameterValue.Value.ToLower() == "startafter";
+                //otherwise the Player will not be startet
+            }
+            if (configurationMap.Parameters.TryGetValue("ReadinessMode", out parameterValue))
+            {
+                Silent = parameterValue.Value.ToLower() == "silent";
+                Verbose = parameterValue.Value.ToLower() == "verbose";
+                //otherwise both values are false (default setting "normal")
+            }
+            
+            if (configurationMap.Parameters.TryGetValue("ReadinessOutputFolder", out parameterValue))
+            {
+                if(parameterValue.Value.Length != 0) 
+                {
+                    string strOutputPathTemp = parameterValue.Value;
+                    if (parameterValue.Value.ToUpper().Equals("USERTEMPFOLDER")) { strOutputPathTemp = Path.GetTempPath(); };
+
+                    if (Directory.Exists(strOutputPathTemp))
+                    {
+                        if (HasWritePermissionOnDir(strOutputPathTemp))
+                        {
+
+                            strOutputPath = strOutputPathTemp;
+                            resultFilePathYaml = System.IO.Path.Combine(strOutputPath, resultFileNameYaml);
+                            resultFilePathJson = System.IO.Path.Combine(strOutputPath, resultFileNameJson);
+                        }
+                        else
+                        {
+                            Console.WriteLine(String.Format("Could not set the output to: {0} - folder not writable\n0utput written to {1}", strOutputPathTemp, strOutputPath));
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine(String.Format("Could not set the output to: {0} - folder doesn't exist\n0utput written to {1}", strOutputPathTemp, strOutputPath));
+                    }
+                }
+                //otherwise the initial values (all files are written to the app folder) are valid
+            }
+            #endregion
 
             info.AppFolder = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
 
-            #region Command Line 
+            #region Command Line
+
+            //If a parameter is applied it will overwrite the setting in the yaml file
             var Configuration = new ConfigurationBuilder()
                .AddCommandLine(args)
                .Build();
@@ -83,7 +217,9 @@ namespace ReadinessTool
                             Verbose = true;
                         }
                     }
-
+                    //the check values previously were taken from the command line
+                    //now the values are located in the yaml file therefore the code below is inactive
+                    /*
                     if (Configuration["ReadinessDriveSpeed"] != null)
                     {
                         if (Configuration["ReadinessDriveSpeed"].ToString().ToLower() == "true")
@@ -95,7 +231,8 @@ namespace ReadinessTool
                             info.DoDriveSpeedTest = false;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessAudio"] != null)
                     {
                         if (Configuration["ReadinessAudio"].ToString().ToLower() == "true")
@@ -107,7 +244,8 @@ namespace ReadinessTool
                             info.DoAudioCheck = false;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessPortScan"] != null)
                     {
                         if (Configuration["ReadinessPortScan"].ToString().ToLower() == "true")
@@ -119,7 +257,8 @@ namespace ReadinessTool
                             info.DoPortScan = false;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessPortScanStart"] != null)
                     {
                         int _port = -1;
@@ -128,7 +267,8 @@ namespace ReadinessTool
                             info.StartScanMin = _port;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessPortScanRequiredNumber"] != null)
                     {
                         int _number = 1;
@@ -137,7 +277,8 @@ namespace ReadinessTool
                             info.RequiredNumberOfPorts = _number;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessPortScanNumbersToCheck"] != null)
                     {
                         int _number = 1000;
@@ -146,7 +287,8 @@ namespace ReadinessTool
                             info.NumberOfPortsToCheck = _number;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessScreenCheckWidth"] != null)
                     {
                         int _width = 1024;
@@ -155,7 +297,8 @@ namespace ReadinessTool
                             info.MinimalWidth = _width;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessScreenCheckHeight"] != null)
                     {
                         int _height = 768;
@@ -164,16 +307,19 @@ namespace ReadinessTool
                             info.MinimalHeight = _height;
                         }
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessAppFolder"] != null)
                     {
                         info.AppFolder = Configuration["ReadinessAppFolder"].ToString();
                     }
-
+                    */
+                    /*
                     if (Configuration["ReadinessAppName"] != null)
                     {
                         info.AppName = Configuration["ReadinessAppName"].ToString();
                     }
+                    */
                 }
             }
             catch (Exception e)
@@ -186,9 +332,9 @@ namespace ReadinessTool
             #endregion
 
             try
-            { 
+            {
                 #region START PLAYER BEFORE 
-                  
+
                 info.PlayerAvailable = File.Exists(Path.Combine(info.AppFolder, info.AppName));
 
                 if (info.DoApplicationStartBeforeCheck)
@@ -228,15 +374,15 @@ namespace ReadinessTool
                         }
                         catch (Exception e)
                         {
-                            Console.WriteLine("\n Lunching the player failed with an unexpected error:");
+                            Console.WriteLine("\n Launching the player failed with an unexpected error:");
                             Console.WriteLine("\t" + e.GetType() + " " + e.Message);
                             Console.WriteLine(e.StackTrace);
                             info.PlayerStarted = false;
                         }
                     }
-                  
+
                 }
-   
+
                 #endregion
 
                 #region STARTUP 
@@ -245,7 +391,7 @@ namespace ReadinessTool
                 {
                     Console.ForegroundColor = ConsoleColor.Blue;
                     Console.WriteLine("IRTlib: Readiness-Tool ({0})\n", info.Version);
-                    Console.ResetColor(); 
+                    Console.ResetColor();
                 }
 
                 if (!Silent & Verbose)
@@ -267,7 +413,7 @@ namespace ReadinessTool
                 {
                     Console.ForegroundColor = ConsoleColor.White;
                     Console.WriteLine(" - Machine: {0} (Hostname: {1})", info.MachineName, info.HostName);
-                    Console.WriteLine(" - System: {0} (64 bit OS: {1} / 64 bit Process: {2})", info.OSVersion, info.Is64BitOS, info.Is64BitProcess);
+                    Console.WriteLine(" - System: {0} \"{1}\" (64 bit OS: {2} / 64 bit Process: {3})", info.OSVersion, info.OSName, info.Is64BitOS, info.Is64BitProcess);
                     Console.WriteLine(" - CPU: {0} (Usage: {1} %)", info.CPUType, info.CPUUse);
                     Console.WriteLine(" - Memory: Total RAM = {0:0.00}Gb, Available RAM = {1:0.00}Gb", info.TotalRam / 1024 / 1024 / 1024, info.FreeRam / 1024 / 1024 / 1024);
                     Console.WriteLine(" - Touch Enabled Device: {0}", info.TouchEnabled);
@@ -275,57 +421,237 @@ namespace ReadinessTool
                 }
                 #endregion
 
-                #region USER
+                #region OS
+                //OS check #1
+                checkInfo = "OperatingSystemCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
 
-                try
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
                 {
-                    info.UserName = "Unkonwn";
-                    info.IsAdministrator = false;
-                    info.IsUser = false;
-                    info.IsGuest = false;
-
-                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+                    string validVals = "";
+                    foreach (ValidValue vv in checkValue.ValidValues)
                     {
-                        using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
-                        {
-                            WindowsPrincipal principal = new WindowsPrincipal(identity);
-                            info.UserName = identity.Name;
-                            info.IsAdministrator = principal.IsInRole(WindowsBuiltInRole.Administrator);
-                            info.IsUser = principal.IsInRole(WindowsBuiltInRole.User);
-                            info.IsGuest = principal.IsInRole(WindowsBuiltInRole.Guest);
+                        if(info.OSName.Contains(vv.value)) checkResult.Result = ResultType.succeeded;
+                        validVals += String.Format("{0} ", vv.value);
+                    }
 
-                            if (!Silent)
-                            {
-                                Console.ForegroundColor = ConsoleColor.White;
-                                Console.WriteLine(" - Current User: {0} (Roles: Administrator = {1}, User = {2}, Guest = {3})", info.UserName, info.IsAdministrator, info.IsUser, info.IsGuest);
-                            }
+                    checkResult.ResultInfo += String.Format("OS name is \"{0}\" (expected: {1})",info.OSName, validVals);
+
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                //OS check #2
+                checkInfo = "OperatingSystem64bitCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+
+                    ValidValue vv = checkValue.ValidValues.Find(item => item.name == "Is64bit");
+
+                    if (vv != null)
+                    {
+                        if (vv.value.ToLower().Equals("true"))
+                        {
+                            if (info.Is64BitOS) checkResult.Result = ResultType.succeeded;
+                        }
+                        checkResult.ResultInfo += String.Format(" 64bitOS is {0} (expected: {1})", info.Is64BitOS, vv.value);
+                    }
+                    else
+                        checkResult.ResultInfo = "Config data incomplete";
+
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                #endregion
+
+                #region MEMORY
+                //Memory check #1
+                checkInfo = "MemoryInstalledCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+                    ValidValue minimalMemoryInstalled = checkValue.ValidValues.Find(item => item.name == "MinimalMemoryInstalled");
+
+                    if (minimalMemoryInstalled != null)
+                    {
+                        try
+                        {
+                            double mmi = Convert.ToDouble(minimalMemoryInstalled.value);//GB
+                            double tms = info.TotalRam / 1024 / 1024 / 1024;
+
+                            if(tms >= mmi) checkResult.Result = ResultType.succeeded;                               
+                            checkResult.ResultInfo = String.Format("Memory installed: {0:0.00}GB (expected: {1:0.00}GB)", tms, mmi);
+
+                        }
+                        catch (OverflowException)
+                        {
+                            Console.WriteLine("{0} or {1} is outside the range of the Int32 type.", minimalMemoryInstalled.value, info.TotalMemorySystem);
+                        }
+                        catch (FormatException)
+                        {
+                            Console.WriteLine("The {0} or {1} value is not in a recognizable format.",
+                                                minimalMemoryInstalled.value, info.TotalMemorySystem);
                         }
                     }
                 }
-                catch (Exception e)
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                //Memory check #2
+                checkInfo = "MemoryAvailableCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
                 {
-                    Console.WriteLine("\nReading user account failed with an unexpected error:");
-                    Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                    Console.WriteLine(e.StackTrace);
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
                 }
+                else
+                {
+                    ValidValue minimalMemoryAvailable = checkValue.ValidValues.Find(item => item.name == "MinimalMemoryAvailable");
+                    if (minimalMemoryAvailable != null)
+                    {
+                        try
+                        {
+                            double mma = Convert.ToDouble(minimalMemoryAvailable.value);//GB
+                            double fms = info.FreeRam / 1024 / 1024 / 1024;
+
+                            if (fms >= mma) checkResult.Result = ResultType.succeeded;
+                            checkResult.ResultInfo = String.Format("Memory available: {0:0.00}GB (expected: {1:0.00}GB)", fms, mma);
+
+                        }
+                        catch (OverflowException)
+                        {
+                            Console.WriteLine("{0} or {1} is outside the range of the Int32 type.", minimalMemoryAvailable.value, info.FreeMemorySystem);
+                        }
+                        catch (FormatException)
+                        {
+                            Console.WriteLine("The {0} or {1} value is not in a recognizable format.",
+                                                minimalMemoryAvailable.value, info.FreeMemorySystem);
+                        }
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
-                #region VIRUS
+                #region USER
+                //User role check
+                checkInfo = "UserRoleCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
 
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+                    try
+                    {
+                        info.UserName = "Unknown";
+                        info.IsAdministrator = false;
+                        info.IsUser = false;
+                        info.IsGuest = false;
+
+                        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                        {
+                            using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+                            {
+                                WindowsPrincipal principal = new WindowsPrincipal(identity);
+                                info.UserName = identity.Name;
+                                info.IsAdministrator = principal.IsInRole(WindowsBuiltInRole.Administrator);
+                                info.IsUser = principal.IsInRole(WindowsBuiltInRole.User);
+                                info.IsGuest = principal.IsInRole(WindowsBuiltInRole.Guest);
+
+                                //principal.
+
+                                if (!Silent)
+                                {
+                                    Console.ForegroundColor = ConsoleColor.White;
+                                    Console.WriteLine(" - Current User: {0} (Roles: Administrator = {1}, User = {2}, Guest = {3})", info.UserName, info.IsAdministrator, info.IsUser, info.IsGuest);
+                                }
+                            }
+
+                            string role = "";
+                            if (info.IsAdministrator) role = "Administrator";
+                            if (info.IsUser) role = "User";
+                            if (info.IsGuest) role = "Guest";
+
+                            if (checkValue.ValidValues.Exists(item => item.value == role)) checkResult.Result = ResultType.succeeded;
+                            checkResult.ResultInfo = "Current users role is: " + role;
+
+                            string validRoles = "";
+                            foreach (ValidValue vv in checkValue.ValidValues)
+                            {
+                                validRoles += String.Format("{0} ", vv.value);
+                            }
+                            checkResult.ResultInfo += String.Format(" (expected: {0})", validRoles);
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("\nReading user account failed with an unexpected error:");
+                        Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                        Console.WriteLine(e.StackTrace);
+                        checkResult.ResultInfo = "Reading user account failed with an unexpected error";
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                #endregion
+
+                #region VIRUS
                 try
                 {
-                    using (var searcher = new ManagementObjectSearcher(@"\\" + Environment.MachineName +  @"\root\SecurityCenter2", "SELECT * FROM AntivirusProduct"))
+                    using (var searcher = new ManagementObjectSearcher(@"\\" + Environment.MachineName + @"\root\SecurityCenter2", "SELECT * FROM AntivirusProduct"))
                     {
                         var searcherInstance = searcher.Get();
                         foreach (var instance in searcherInstance)
                         {
-                            info.VirusDetais.Add(String.Format("Name: {0}, State {1}, Timestamp {2}, ProductExe {3}, ReportingExe: {4}", 
-                                instance["displayName"].ToString(),
-                                instance["productState"].ToString(),
-                                instance["timestamp"].ToString(), 
-                                instance["pathToSignedProductExe"].ToString() ,
-                                instance["pathToSignedReportingExe"].ToString()));
+                            string displayName = "unknown";
+                            string productState = "unknown";
+                            string timestamp = "unknown";
+                            string pathToSignedProductExe = "unknown";
+                            string pathToSignedReportingExe = "unknown";
+
+                            //some of the properties may not be present
+                            try { var ts = instance.GetPropertyValue("displayName"); displayName = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property displayName not found"); }
+                            try { var ts = instance.GetPropertyValue("productState"); productState = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property productState not found"); }
+                            try { var ts = instance.GetPropertyValue("timestamp"); timestamp = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property timestamp not found"); }
+                            try { var ts = instance.GetPropertyValue("pathToSignedProductExe"); pathToSignedProductExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedProductExe not found"); }
+                            try { var ts = instance.GetPropertyValue("pathToSignedReportingExe"); pathToSignedReportingExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedReportingExe not found"); }
+
+                            info.VirusDetais.Add(String.Format("Name: {0}, State {1}, Timestamp {2}, ProductExe {3}, ReportingExe: {4}",
+                                displayName,
+                                productState,
+                                timestamp,
+                                pathToSignedProductExe,
+                                pathToSignedReportingExe));
                         }
 
                         if (!Silent)
@@ -348,58 +674,231 @@ namespace ReadinessTool
                     Console.WriteLine(e.StackTrace);
                 }
 
+                //anti virus software check check
+                checkInfo = "AntiVirusSoftwareCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+                        ValidValue antiVirusSoftwareExpected = checkValue.ValidValues.Find(item => item.name == "AntiVirusSoftwareExpected");
+                        if (antiVirusSoftwareExpected != null)
+                        {
+                            if (antiVirusSoftwareExpected.value.ToLower().Equals("true")) { if (info.VirusDetais.Count > 0) checkResult.Result = ResultType.succeeded; }
+
+                            checkResult.ResultInfo = "Anti virus software:";
+                            foreach (var s in info.VirusDetais)
+                            {
+                                string[] ss = s.Split(',');
+                                if (ss.Length > 0) checkResult.ResultInfo += String.Format(" {0},", ss[0]);
+                            }
+
+                            checkResult.ResultInfo += String.Format(" (expected: {0})", antiVirusSoftwareExpected.value);
+                        }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
                 #endregion
- 
+
                 #region GRAPHIC
-                try
+                //screen size check
+                checkInfo = "ScreenResolutionCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
                 {
-                    info.MinimalScreenSizeCheck = false;
-                    info.MinimalScreenSize = String.Format("{0}x{1}", info.MinimalWidth, info.MinimalHeight);
-                    var gr = Display.GetGraphicsAdapters();
-                    foreach (var g in gr)
-                    {
-                        var _monitors = Display.GetMonitors(g.DeviceName);
-                        string _monitorName = g.DeviceName.Replace(@"\\.\", "");
-                        string _monitorState = "UNKOWN";
-                        if (_monitors.Count > 0)
-                        {
-                            _monitorName = String.Format("{0} ({1})", g.DeviceName.Replace(@"\\.\",""), _monitors[0].DeviceString);
-                            _monitorState = _monitors[0].StateFlags.ToString();
-                        }
-                        var _mode = Display.GetDeviceMode(g.DeviceName);
-                        info.MonitorDetails.Add(String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState));
-
-                        if (_mode.dmPelsWidth >= info.MinimalWidth && _mode.dmPelsHeight >= info.MinimalHeight)
-                            info.MinimalScreenSizeCheck = true;
-                    }
-
-                    if (!Silent)
-                    {
-                        Console.ForegroundColor = ConsoleColor.White;
-                        Console.WriteLine(" - Displays: {0} device(s) (Minimal Size: {1} - {2}) ", info.MonitorDetails.Count, info.MinimalScreenSize, info.MinimalScreenSizeCheck);
-                        if (Verbose)
-                        {
-                            foreach (var s in info.MonitorDetails)
-                                Console.WriteLine("   " + s);
-                        }
-
-                    }
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
                 }
-                catch (Exception e)
+                else
                 {
-                    Console.WriteLine("\nReading graphic devices failed with an unexpected error:");
-                    Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                    Console.WriteLine(e.StackTrace);
+                        try
+                        {
+                            ValidValue srH = checkValue.ValidValues.Find(item => item.name == "MinimalHorizontalRes");
+                            ValidValue srV = checkValue.ValidValues.Find(item => item.name == "MinimalVerticalRes");
+
+                            if (srH != null && srH != null)
+                            {
+                                try
+                                {
+                                    info.MinimalWidth = Convert.ToInt32(srH.value);
+                                    info.MinimalHeight = Convert.ToInt32(srV.value);
+                                }
+                                catch (OverflowException)
+                                {
+                                    Console.WriteLine("{0} or {1} is outside the range of the Int32 type.", srH.value, srV.value);
+                                }
+                                catch (FormatException)
+                                {
+                                    Console.WriteLine("The {0} or {1} value '{2}' or {3} is not in a recognizable format.",
+                                                      srH.value.GetType().Name, srV.value.GetType().Name, srH.value, srV.value);
+                                }
+                            }
+                            else
+                            {
+                                checkResult.ResultInfo = "Config data incomplete, using defaults: " + checkInfo;
+                            }
+
+                            info.MinimalScreenSizeCheck = false;
+                            info.MinimalScreenSize = String.Format("{0}x{1}", info.MinimalWidth, info.MinimalHeight);
+                            var gr = Display.GetGraphicsAdapters();
+                            foreach (var g in gr)
+                            {
+                                var _monitors = Display.GetMonitors(g.DeviceName);
+                                string _monitorName = g.DeviceName.Replace(@"\\.\", "");
+                                string _monitorState = "UNKOWN";
+                                if (_monitors.Count > 0)
+                                {
+                                    _monitorName = String.Format("{0} ({1})", g.DeviceName.Replace(@"\\.\", ""), _monitors[0].DeviceString);
+                                    _monitorState = _monitors[0].StateFlags.ToString();
+                                }
+                                var _mode = Display.GetDeviceMode(g.DeviceName);
+                                info.MonitorDetails.Add(String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState));
+
+                                //check the size
+                                //at least one of the displays must meet the check values
+                                if (_mode.dmPelsWidth >= info.MinimalWidth && _mode.dmPelsHeight >= info.MinimalHeight)
+                                {
+                                    //SystemInfo structure:
+                                    info.MinimalScreenSizeCheck = true;
+
+                                }
+                                //checkResult structure
+                                if (_mode.dmPelsWidth >= info.MinimalWidth && _mode.dmPelsHeight >= info.MinimalHeight)
+                                {
+                                    if (!checkResults.CheckResultMap.ContainsKey(checkInfo))
+                                        //add the check result for the current monitor
+                                        checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.succeeded, String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState)));
+                                    else
+                                        //append the check result of the current monitor to the existing one
+                                        checkResults.CheckResultMap[checkInfo].ResultInfo += String.Format(" ; {0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState);
+                                }
+                            }//end foreach
+
+                            //if there were no suitable monitors found add a negative check result
+                            if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = false; checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.failed, "No suitable monitors found")); }
+
+                            if (!Silent)
+                            {
+                                Console.ForegroundColor = ConsoleColor.White;
+                                Console.WriteLine(" - Displays: {0} device(s) (Minimal Size: {1} - {2}) ", info.MonitorDetails.Count, info.MinimalScreenSize, info.MinimalScreenSizeCheck);
+                                if (Verbose)
+                                {
+                                    foreach (var s in info.MonitorDetails)
+                                        Console.WriteLine("   " + s);
+                                }
+
+                            }
+                        }//end try
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("\nReading graphic devices failed with an unexpected error:");
+                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                            Console.WriteLine(e.StackTrace);
+                            //in case an error occurred add a negative check result
+                            if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = false; checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.failed, "Check has failed. An unexpected error occurred")); }
+                        }
                 }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+                checkResults.CheckResultMap[checkInfo].ResultInfo +=String.Format(" (expected: {0}, {1})", info.MinimalWidth, info.MinimalHeight);
+                #endregion
+
+                #region TOUCHSCREEN
+               //touch screen check
+               checkInfo = "TouchScreenCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+                        ValidValue touchScreenExpected = checkValue.ValidValues.Find(item => item.name == "TouchScreenExpected");
+                        if (touchScreenExpected != null)
+                        {
+                            if (touchScreenExpected.value.ToLower().Equals("true")) { if (info.HasTouch == true) checkResult.Result = ResultType.succeeded; }
+                            checkResult.ResultInfo = String.Format("Touch screen present: {0} (expected: {1}) - Enabled info: {2}", info.HasTouch, touchScreenExpected.value, info.TouchEnabled);
+                        }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
                 #region AUDIO
+                //Audio checks
+                checkInfo = "AudioDevicesCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
 
-                if (info.DoAudioCheck)
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
                 {
-                    try
-                    {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+                        try
+                        {
+                            var _audioSearcher = new ManagementObjectSearcher("SELECT * FROM Win32_SoundDevice");
+                            var _audioCollection = _audioSearcher.Get();
+                            info.NumberOfAudioDevices = _audioCollection.Count;
+                            foreach (var d in _audioCollection)
+                            {
+                                info.AudioDetails.Add(String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status")));
+
+                                if (!checkResults.CheckResultMap.ContainsKey(checkInfo))
+                                    //add the check result for the current monitor
+                                    checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.succeeded, String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status"))));
+                                else
+                                    //append the check result of the current monitor to the existing one
+                                    checkResults.CheckResultMap[checkInfo].ResultInfo += String.Format(" ; Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status"));
+
+                            }
+
+                            if (!Silent)
+                            {
+                                Console.ForegroundColor = ConsoleColor.White;
+                                Console.WriteLine(" - Audio: {0} device(s) (Test: {1}) ", info.NumberOfAudioDevices, info.PlayTestSuccess);
+                                if (Verbose)
+                                {
+                                    foreach (var s in info.AudioDetails)
+                                        Console.WriteLine("   " + s);
+                                }
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("\nReading audio devices failed with an unexpected error:");
+                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                            Console.WriteLine(e.StackTrace);
+                        }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                checkInfo = "AudioMidiToneCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
                         try
                         {
                             info.PlayTestSuccess = true;
@@ -409,85 +908,108 @@ namespace ReadinessTool
                                 Thread.Sleep(1000);
                                 midiOut.Send(MidiMessage.StopNote(60, 0, 1).RawData);
                                 Thread.Sleep(1000);
+
+                                checkResult.Result = ResultType.succeeded;
+                                checkResult.ResultInfo = "Midi tone was played successfully";
                             }
                         }
                         catch
                         {
                             info.PlayTestSuccess = false;
-                        }
+                            checkResult.ResultInfo = "Error while playing midi tone";
 
-                        var _audioSearcher = new ManagementObjectSearcher("SELECT * FROM Win32_SoundDevice");
-                        var _audioCollection = _audioSearcher.Get();
-                        info.NumberOfAudioDevices = _audioCollection.Count;
-                        foreach (var d in _audioCollection)
-                        {
-                            info.AudioDetails.Add(String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status")));
                         }
-
-                        if (!Silent)
-                        {
-                            Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine(" - Audio: {0} device(s) (Test: {1}) ", info.NumberOfAudioDevices, info.PlayTestSuccess);
-                            if (Verbose)
-                            {
-                                foreach (var s in info.AudioDetails)
-                                    Console.WriteLine("   " + s);
-                            }
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine("\nReading graphic devices failed with an unexpected error:");
-                        Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                        Console.WriteLine(e.StackTrace);
-                    }
-
                 }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
-                 
+
                 #region NETWORK
-                try
-                {
-                    using (WebClient client = new WebClient())
-                    {
-                        using (client.OpenRead("http://www.google.com/"))
-                        {
-                            info.OpenReadSucces = true;
-                        }
-                    }
-                }
-                catch
-                {
-                    info.OpenReadSucces = false;
-                }
 
-                try
-                {
-                    using (var ping = new Ping())
-                    {
-                        var reply = ping.Send("www.google.com");
-                        if (reply != null && reply.Status == IPStatus.Success)
-                        {
-                            info.PingSucces = true;
-                        }
-                    }
-                }
-                catch
-                {
-                    info.PingSucces = false;
-                }
+                //internet access check
+                checkInfo = "NetworkConnectivityCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
 
-                if (!Silent)
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
                 {
-                    Console.ForegroundColor = ConsoleColor.White;
-                    Console.WriteLine(" - Network Connectivity: Ping = {0}, OpenRead = {1}", info.PingSucces, info.OpenReadSucces);
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
                 }
+                else
+                {
+
+                        ValidValue webClientURL = checkValue.ValidValues.Find(item => item.name == "WebClientURL");
+                        ValidValue webClientURLaccessExpected = checkValue.ValidValues.Find(item => item.name == "WebClientURLaccessExpected");
+
+                        if (webClientURL != null && webClientURLaccessExpected != null)
+                        {
+                            try
+                            {
+                                using (WebClient client = new WebClient())
+                                {
+                                    using (client.OpenRead(webClientURL.value))
+                                    {
+                                        info.OpenReadSucces = true;
+                                        checkResult.ResultInfo = String.Format("Access to {0} successful", webClientURL.value);
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                info.OpenReadSucces = false;
+                                checkResult.ResultInfo = String.Format("Access to {0} failed", webClientURL.value);
+                            }
+                            ValidValue pingURL = checkValue.ValidValues.Find(item => item.name == "PingURL");
+                            ValidValue pingURLaccessExpected = checkValue.ValidValues.Find(item => item.name == "PingURLaccessExpected");
+
+                            if (pingURL != null && pingURLaccessExpected != null)
+                            {
+                                try
+                                {
+                                    using (var ping = new Ping())
+                                    {
+                                        var reply = ping.Send(pingURL.value);
+                                        if (reply != null && reply.Status == IPStatus.Success)
+                                        {
+                                            info.PingSucces = true;
+                                            checkResult.ResultInfo += String.Format(" ; Ping of {0} successful", pingURL.value);
+                                        }
+                                        else
+                                        {
+                                            checkResult.ResultInfo += String.Format(" ; Ping of {0} failed", pingURL.value);
+                                        }
+                                    }
+                                }
+                                catch
+                                {
+                                    info.PingSucces = false;
+                                    checkResult.ResultInfo += String.Format(" ; Ping of {0} failed", pingURL.value);
+                                }
+
+                                if (info.OpenReadSucces && info.PingSucces) checkResult.Result = ResultType.succeeded;
+                            }
+
+                            if (!Silent)
+                            {
+                                Console.ForegroundColor = ConsoleColor.White;
+                                Console.WriteLine(" - Network Connectivity: Ping = {0}, OpenRead = {1}", info.PingSucces, info.OpenReadSucces);
+                            }
+
+                        }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
                 #region PORTS
-
+                /*
+                 * checks
+                 * a) if a number of ports is available within a range of ports (PortRangeAvailableCheck)
+                 * b) if ports provided in a list are available (PortAvailableCheck)
+                 * 
+                 */
                 try
                 {
 
@@ -499,7 +1021,6 @@ namespace ReadinessTool
                             info.UsedPorts.Add(c.LocalEndPoint.Port);
                     }
 
-                    
                     if (!Silent)
                     {
                         Console.ForegroundColor = ConsoleColor.White;
@@ -522,12 +1043,12 @@ namespace ReadinessTool
                                 if (!IsPortOpen("127.0.0.1", _port, new TimeSpan(250)))
                                 {
                                     info.FreePorts.Add(_port);
-                                } 
+                                }
                             }
                             _port++;
                             _i++;
                         }
-                       
+
                         if (!Silent)
                         {
                             Console.ForegroundColor = ConsoleColor.White;
@@ -546,10 +1067,97 @@ namespace ReadinessTool
                     Console.WriteLine(e.StackTrace);
                 }
 
+                //port checks
+
+                //port check #1
+                checkInfo = "PortRangeAvailableCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+                        ValidValue firstPort = checkValue.ValidValues.Find(item => item.name == "FirstPort");
+                        ValidValue lastPort = checkValue.ValidValues.Find(item => item.name == "LastPort");
+                        ValidValue minimumPortsFree = checkValue.ValidValues.Find(item => item.name == "MinimumPortsFree");
+
+                        if (firstPort != null && lastPort != null && minimumPortsFree != null) {
+
+                            long _firstPort = 0;
+                            long _lastPort = 0;
+                            long _minimumPortsFree = 0;
+
+                            if (long.TryParse(firstPort.value, out _firstPort) && long.TryParse(lastPort.value, out _lastPort) && long.TryParse(minimumPortsFree.value, out _minimumPortsFree))
+                            {
+                                long _freePorts = 0;
+                                //count the number of available ports within the range 
+                                for(long i = _firstPort; i <= _lastPort; i++)
+                                {
+                                    if (!info.UsedPorts.Contains(i)) _freePorts++;
+                                }
+
+                                if(_freePorts >= _minimumPortsFree) checkResult.Result = ResultType.succeeded;
+
+                                checkResult.ResultInfo = String.Format("{0} ports are available in the range of port {1} to port {2}", _freePorts, _firstPort, _lastPort);
+                                checkResult.ResultInfo += String.Format(" (expected: minimum {0} available ports)", _minimumPortsFree);
+                        }
+                        else
+                            {
+                                checkResult.ResultInfo += "Wrong config value format: ";
+                            }
+                        }
+                        else { checkResult.ResultInfo += "Config data partly missing";}
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                //port check #2
+                checkInfo = "PortAvailableCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+                    long _port = 0;
+                    checkResult.Result = ResultType.succeeded;
+                    checkResult.ResultInfo = "";
+                    foreach (ValidValue port in checkValue.ValidValues)
+                    {
+                        if (long.TryParse(port.value, out _port))
+                        {
+                            if (info.UsedPorts.Contains(_port))
+                            {
+                                checkResult.Result = ResultType.failed;
+                                checkResult.ResultInfo += String.Format(" port {0} not available;", _port);
+                            }
+                            else { checkResult.ResultInfo += String.Format(" port {0} available;", _port); }
+
+                        }
+                        else { checkResult.ResultInfo += String.Format(" Wrong format: port {0};", port.value); }
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
                 #endregion
 
                 #region FILEACCESS
-                 
+                /*
+                 * folder accessable check
+                 * a) checks if the user's temp folder (C:\Users\<currentUser>\AppData\Local\Temp\) is writeable
+                 * b) checks if the root folder (C:\) is writeable
+                 */
+                #region FILEACCESS - originalCheck
+
                 try
                 {
                     info.TempFolder = Path.GetTempPath();
@@ -562,11 +1170,10 @@ namespace ReadinessTool
                     Console.WriteLine("\t" + e.GetType() + " " + e.Message);
                     Console.WriteLine(e.StackTrace);
                 }
-
                 try
                 {
                     long freeBytesOut;
-                   
+
                     if (NativeMethods.GetDiskFreeSpaceEx(info.TempFolder, out freeBytesOut, out var _1, out var _2))
                         info.TempFolderFreeBytes = freeBytesOut;
 
@@ -586,10 +1193,136 @@ namespace ReadinessTool
                     Console.WriteLine(" - Tempfolder: {0} (Write Access: {1}, Free Bytes: {2})", info.TempFolder, info.WriteAccessTempFolder, info.TempFolderFreeBytes);
                     Console.WriteLine(" - Executable: {0} (Root drive: {1}, Write Access: {2}, Free Bytes: {3})", info.Executable, info.RootDrive, info.WriteAccessRoot, info.CurrentDriveFreeBytes);
                 }
+                #endregion
+
+                //folder writable check
+                checkInfo = "FoldersWritableCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+                    string Executable = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                    checkResult.Result = ResultType.succeeded;
+                    checkResult.ResultInfo = "";
+                    foreach (ValidValue folder in checkValue.ValidValues)
+                    {
+                        if (folder.value.Contains("<USER>")) { folder.value = folder.value.Replace("<USER>", Environment.UserName.ToString()); };
+                        if (folder.value.ToUpper().Equals("USERTEMPFOLDER")) { folder.value = Path.GetTempPath(); };
+                        if (folder.value.ToUpper().Equals("ROOTDRIVE")) { folder.value = System.IO.Path.GetPathRoot(Executable); };
+
+                        try
+                        {
+                            checkResult.ResultInfo += String.Format("Folder {0}: ", folder.value);
+                            if (!HasWritePermissionOnDir(folder.value))
+                            {
+                                checkResult.Result = ResultType.failed;
+                                checkResult.ResultInfo += "NOK ";
+                            }else
+                                checkResult.ResultInfo += "OK ";
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("\nChecking write permission failed with an unexpected error:");
+                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                            Console.WriteLine(e.StackTrace);
+                            checkResult.ResultInfo += " Checking write permission failed ";
+                        }
+                    }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                //folder free space
+                checkInfo = "FoldersFreeSpaceCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else
+                {
+                        string Executable = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                        checkResult.Result = ResultType.succeeded;
+                        checkResult.ResultInfo = "";
+                        foreach (ValidValue folder in checkValue.ValidValues)
+                        {
+                            if (folder.name.Contains("<USER>")) { folder.name = folder.name.Replace("<USER>", Environment.UserName.ToString()); };
+                            if (folder.name.ToUpper().Equals("USERTEMPFOLDER")) { folder.name = Path.GetTempPath(); };
+                            if (folder.name.ToUpper().Equals("ROOTDRIVE")) { folder.name = System.IO.Path.GetPathRoot(Executable); };
+
+                            try
+                            {
+                                long freeBytesOut = 0;
+                                long expectedFreeMB = 0;
+
+                                try
+                                {
+                                    expectedFreeMB = Convert.ToInt32(folder.value);//MB
+                                    if (NativeMethods.GetDiskFreeSpaceEx(folder.name, out freeBytesOut, out var _1, out var _2))//bytes
+                                    {
+                                        long freeMB = freeBytesOut / 1024 / 1024;
+                                        checkResult.ResultInfo += String.Format("Folder {0} free space {1}MB: ", folder.name, freeMB);
+                                        if (freeMB < expectedFreeMB)
+                                        {
+                                            checkResult.Result = ResultType.failed;
+                                            checkResult.ResultInfo += "NOK ";
+                                        }
+                                        else
+                                            checkResult.ResultInfo += "OK ";
+
+                                        checkResult.ResultInfo += String.Format(" (expected: {0}MB) ", expectedFreeMB);
+
+                                }
+                                else
+                                        checkResult.ResultInfo += "getting free space failed ";
+
+                                }
+                                catch (OverflowException)
+                                {
+                                    Console.WriteLine("{0} is outside the range of the Int32 type.", folder.value);
+                                }
+                                catch (FormatException)
+                                {
+                                    Console.WriteLine("The {0} value is not in a recognizable format.",
+                                                        folder.value.GetType().Name);
+                                }
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("\nChecking disk space failed with an unexpected error:");
+                                Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                                Console.WriteLine(e.StackTrace);
+                                checkResult.ResultInfo += " Checking disk space failed ";
+                            }
+                        }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
                 #region DRIVESPEED
+                checkInfo = "DriveSpeedCheck";
+                checkResult = new CheckResult(ResultType.failed, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+
+                info.DoDriveSpeedTest = checkValue.RunThisCheck;
 
                 if (info.DoDriveSpeedTest)
                 { 
@@ -621,7 +1354,7 @@ namespace ReadinessTool
                                         Console.Write("\n   * {0}/{1} {2}", bigTest.CompletedTests + 1, bigTest.TotalTests, (sender as Test).DisplayName);
                                 }
 
-                                ClearLine(curCursor);
+                                if(!Silent) ClearLine(curCursor);
 
                                 if (e.Status != TestStatus.Completed)
                                 {
@@ -687,7 +1420,7 @@ namespace ReadinessTool
                                     info.DoDriveSpeedTest = false;
                                 }
 
-                                ShowCounters(bigTest);
+                                if(!Silent) ShowCounters(bigTest);
                             };
 
                             var results = bigTest.Execute();
@@ -720,13 +1453,99 @@ namespace ReadinessTool
                         Console.WriteLine("\t" + e.GetType() + " " + e.Message);
                         Console.WriteLine(e.StackTrace);
                     }
-                     
+
+                    if (checkValue != null)
+                    {
+
+                        ValidValue minimalSpeedRead = checkValue.ValidValues.Find(item => item.name == "MinimalSpeedRead");
+                        ValidValue minimalSpeedWrite = checkValue.ValidValues.Find(item => item.name == "MinimalSpeedWrite");
+
+                        if (minimalSpeedRead != null && minimalSpeedWrite != null)
+                        {
+                            double msr = -1;
+                            double msw = -1;
+                            try
+                            {
+                                msr = Convert.ToDouble(minimalSpeedRead.value);
+                                msw = Convert.ToDouble(minimalSpeedWrite.value);
+                            }
+                            catch (FormatException)
+                            {
+                                Console.WriteLine("Unable to convert '{0}' or '{1}' to a Double.", minimalSpeedRead.value, minimalSpeedWrite.value);
+                            }
+                            catch (OverflowException)
+                            {
+                                Console.WriteLine("'{0}' or '{1}' is outside the range of a Double.", minimalSpeedRead.value, minimalSpeedWrite.value);
+                            }
+
+                            if (msr > -1 && msw > -1)
+                            {
+                                if (info.ReadScore >= msr && info.WriteScore >= msw) checkResult.Result = ResultType.succeeded;
+
+                                checkResult.ResultInfo = String.Format("ReadScore: {0:0.00} (expected: {1}) WriteScore: {2:0.00} (expected: {3})",
+                                    info.ReadScore,
+                                    msr,
+                                    info.WriteScore,
+                                    msw);
+                            }
+                        }
+
+                    }
                 }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
                 #endregion
 
                 #region REGISTRY
-                 
+                checkInfo = "RegistryKeyCheck";
+                checkResult = new CheckResult(ResultType.succeeded, "");
+
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+
+                if (!checkValue.RunThisCheck)
+                {
+                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                    checkResult.ResultInfo = checkValue.PurposeInfo;
+                }
+                else 
+                {
+                        try
+                        {
+                            //if (RegistryKeys.Count > 0)
+                            if (checkValue.ValidValues.Count > 0)
+                                {
+
+                                foreach (ValidValue p in checkValue.ValidValues)
+                                {
+                                    var _parts = p.name.Split(";", StringSplitOptions.RemoveEmptyEntries);
+                                    string _result = (string)Registry.GetValue(_parts[0], _parts[1], "not set");
+                                    if (_result != null)
+                                    {
+                                        if (!_result.Equals(p.value)) checkResult.Result = ResultType.failed;
+                                        checkResult.ResultInfo += String.Format("Key: {0} value {1} result {2} (expected:{3}) ", _parts[0], _parts[1], _result, p.value);
+                                    }
+                                    else
+                                    {
+                                        checkResult.Result = ResultType.failed;
+                                        checkResult.ResultInfo += String.Format("Key: {0} value {1} undefined (expected:{2}) ", _parts[0], _parts[1], p.value);
+                                    }
+                                }
+                            }
+
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("\n Reading registry failed with an unexpected error:");
+                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                            Console.WriteLine(e.StackTrace);
+                            checkResult.ResultInfo += " Reading registry failed with an unexpected error";
+                        }
+                }
+                if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
+
+                /*
+                  List<string> RegistryKeys = new List<string>() { @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation" };
+                */
                 try
                 {
                     if (RegistryKeys.Count > 0)
@@ -823,10 +1642,12 @@ namespace ReadinessTool
 
                 #region WRITE INFO
                 string _fileName = "Readiness_" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".txt";
+                string _filePath = System.IO.Path.Combine(strOutputPath, _fileName);
 
                 try
                 {
-                    File.WriteAllText(_fileName, info.ToString());
+                    File.WriteAllText(_filePath, info.ToString());
+                    if (!Silent) { Console.WriteLine("Report written to file " + _filePath); }
                 }
                 catch { }
 
@@ -834,10 +1655,60 @@ namespace ReadinessTool
                 {
                     try
                     {
-                        Process.Start("notepad.exe", _fileName);
+                        Process.Start("notepad.exe", _filePath);
                     }
                     catch { }
                 }
+
+                #endregion
+
+                #region WRITERESULTS
+
+                //write the results to the console
+
+                if (!Silent)
+                {
+                    if (checkResults.OverallResult)
+                        Console.ForegroundColor = ConsoleColor.Green;
+                    else
+                        Console.ForegroundColor = ConsoleColor.Red;
+
+                    Console.WriteLine("Overall check result is {0} See details below \n", checkResults.OverallResult);
+                    Console.ResetColor();
+
+
+                foreach (KeyValuePair<string, CheckResult> entry in checkResults.CheckResultMap)
+                    {
+
+                        if (entry.Value.Result == ResultType.succeeded) Console.ForegroundColor = ConsoleColor.Green;
+                        if (entry.Value.Result == ResultType.failed) Console.ForegroundColor = ConsoleColor.Red;
+                        if (entry.Value.Result == ResultType.skipped) Console.ForegroundColor = ConsoleColor.Gray;
+
+                        Console.WriteLine("{0} - {1} Info: {2}", entry.Value.Result, entry.Key, entry.Value.ResultInfo);
+                    }
+                    Console.ResetColor();
+                }
+
+                //write the results to a yaml file
+                StringBuilder sb = new StringBuilder();
+                StringWriter writer = new StringWriter(sb);
+
+                var serializer = new SerializerBuilder()
+                .Build();
+
+                serializer.Serialize(writer, checkResults);
+
+                using (StreamWriter streamWriter = new StreamWriter(resultFilePathYaml))
+                {
+                    streamWriter.Write(writer.ToString());
+                }
+                if (!Silent) { Console.WriteLine("Result file written to file " + resultFilePathYaml); }
+
+                //write the results to a json file
+
+                string jsonString = JsonSerializer.Serialize(checkResults);
+                File.WriteAllText(resultFilePathJson, jsonString);
+                if (!Silent) { Console.WriteLine("Result file written to file " + resultFilePathJson); }
 
                 #endregion
 
@@ -848,8 +1719,6 @@ namespace ReadinessTool
                 Console.WriteLine("\t" + ex.GetType() + " " + ex.Message);
                 Console.WriteLine(ex.StackTrace);
             }
-
-           
         }
 
         public static bool HasWritePermissionOnDir(string path)
@@ -918,6 +1787,7 @@ namespace ReadinessTool
 
         private static void ShowCounters(TestSuite ts)
         {
+
             var left = Console.CursorLeft;
             var top = Console.CursorTop;
             var elapsedSecs = ts.ElapsedMs / 1000;
@@ -992,7 +1862,6 @@ namespace ReadinessTool
             }
         }
     }
-
     
     public static class NativeMethods
     {

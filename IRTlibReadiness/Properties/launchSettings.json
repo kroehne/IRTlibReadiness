@@ -3,7 +3,7 @@
     "ReadinessTool": {
       "commandName": "Project",
       "commandLineArgs": "/ReadinessStartPlayer=\"startbefore\" /AutoLoginUserName=\"abc123\" /RawDataFolder=\"..\\out\" /MonitoringFile=\"..\\out\\abc123.json\" /AutoLoginCreateWithTest=\"Dummy\"",
-      "workingDirectory": "C:\\work\\day\\2021_07_04__Readiness_Player\\TBT"
+      "workingDirectory": "C:\\pj\\IRTreadinessTool\\workspace"
     }
   }
 }
