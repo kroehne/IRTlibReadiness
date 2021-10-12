@@ -42,17 +42,17 @@ namespace ReadinessTool
             CheckResult checkResult = null;
             ParameterValue parameterValue = null;
 
-            string strExeFilePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            string strWorkPath = System.IO.Path.GetDirectoryName(strExeFilePath);
-            string strOutputPath = System.IO.Path.GetDirectoryName(strExeFilePath);
+            string strAssemblyPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string strWorkPath = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName);
+            string strOutputPath = strWorkPath;
 
             string configFileNameYaml = @"ReadinessConfig.yaml";
             string configFileNameJson = @"ReadinessConfig.json";
             string configFilePathYaml = System.IO.Path.Combine(strWorkPath, configFileNameYaml);
             string configFilePathJson = System.IO.Path.Combine(strWorkPath, configFileNameJson);
 
-            string resultFileNameYaml = @"ReadinessResult.yaml";
-            string resultFileNameJson = @"ReadinessResult.json";
+            string resultFileNameYaml = @"ReadinessResult_" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".yaml";
+            string resultFileNameJson = @"ReadinessResult_" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".json";
             //the output path of the results may be affected by the parameter later
             string resultFilePathYaml = System.IO.Path.Combine(strOutputPath, resultFileNameYaml);
             string resultFilePathJson = System.IO.Path.Combine(strOutputPath, resultFileNameJson);
@@ -160,7 +160,7 @@ namespace ReadinessTool
                         }
                         else
                         {
-                            Console.WriteLine(String.Format("Could not set the output to: {0} - folder not writable\n0utput written to {1}", strOutputPathTemp, strOutputPath));
+                            Console.WriteLine(String.Format("Could not set the output to: {0} - folder not writable\nOutput written to {1}", strOutputPathTemp, strOutputPath));
                         }
                     }
                     else
@@ -827,8 +827,8 @@ namespace ReadinessTool
                         ValidValue touchScreenExpected = checkValue.ValidValues.Find(item => item.name == "TouchScreenExpected");
                         if (touchScreenExpected != null)
                         {
-                            if (touchScreenExpected.value.ToLower().Equals("true")) { if (info.HasTouch == true) checkResult.Result = ResultType.succeeded; }
-                            checkResult.ResultInfo = String.Format("Touch screen present: {0} (expected: {1}) - Enabled info: {2}", info.HasTouch, touchScreenExpected.value, info.TouchEnabled);
+                            if (touchScreenExpected.value.ToLower().Equals("true")) { if (info.TouchEnabled == true) checkResult.Result = ResultType.succeeded; }
+                            checkResult.ResultInfo = String.Format("Touch screen present: {0} (expected: {1})", info.TouchEnabled, touchScreenExpected.value);
                         }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }

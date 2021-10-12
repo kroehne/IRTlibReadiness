@@ -132,10 +132,12 @@ namespace ReadinessTool
         }
         public static bool HasTouchDevice()
         {
+            bool hasTouch = false;
+            /*
             bool hasTouch = Windows.Devices.Input
                           .PointerDevice.GetPointerDevices()
                           .Any(p => p.PointerDeviceType == Windows.Devices.Input.PointerDeviceType.Touch);
-
+            */
             return hasTouch;
         }
         #endregion

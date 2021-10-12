@@ -74,7 +74,6 @@ namespace ReadinessTool
                     ValidValues = new List<ValidValue>(),
                     UnitInfo = "operating system name"
                 };
-                checkValue.ValidValues.Add(new ValidValue("OS", "Windows 7"));
                 checkValue.ValidValues.Add(new ValidValue("OS", "Windows 8"));
                 checkValue.ValidValues.Add(new ValidValue("OS", "Windows 10"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
@@ -317,8 +316,8 @@ namespace ReadinessTool
                     ValidValues = new List<ValidValue>(),
                     UnitInfo = "MB/s"
                 };
-                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedRead", "100"));
-                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedWrite", "100"));
+                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedRead", "25"));
+                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedWrite", "20"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
