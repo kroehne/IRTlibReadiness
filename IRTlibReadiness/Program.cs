@@ -46,16 +46,18 @@ namespace ReadinessTool
             string strWorkPath = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName);
             string strOutputPath = strWorkPath;
 
-            string configFileNameYaml = @"ReadinessConfig.yaml";
-            string configFileNameJson = @"ReadinessConfig.json";
+            string configFileNameYaml = "ReadinessConfig.yaml";
+            string configFileNameJson = "ReadinessConfig.json";
             string configFilePathYaml = System.IO.Path.Combine(strWorkPath, configFileNameYaml);
             string configFilePathJson = System.IO.Path.Combine(strWorkPath, configFileNameJson);
 
-            string resultFileNameYaml = @"ReadinessResult_" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".yaml";
-            string resultFileNameJson = @"ReadinessResult_" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".json";
+            //suffixes for the result output files
+            string resultFileNameText = "ReadinessResult_";
+            string resultFileNameYaml = "ReadinessResult_";
+            string resultFileNameJson = "ReadinessResult_";
             //the output path of the results may be affected by the parameter later
-            string resultFilePathYaml = System.IO.Path.Combine(strOutputPath, resultFileNameYaml);
-            string resultFilePathJson = System.IO.Path.Combine(strOutputPath, resultFileNameJson);
+            string resultFilePathYaml = "";
+            string resultFilePathJson = "";
 
             ConfigurationMap configurationMap = new ConfigurationMap();
             CheckResults checkResults = new CheckResults();
@@ -1586,48 +1588,56 @@ namespace ReadinessTool
 
                 if (info.DoApplicationStartAfterCheck)
                 {
-                    info.PlayerStarted = false;
-                    if (File.Exists(Path.Combine(info.AppFolder, info.AppName)))
+                    //don't start the player if the overall result is false
+                    if (!checkResults.OverallResult)
                     {
-                        try
-                        {
-                            var process = new Process
-                            {
-                                StartInfo = new ProcessStartInfo
-                                {
-                                    FileName = Path.Combine(info.AppFolder, info.AppName),
-                                    Arguments = string.Join(" ", args),
-                                    UseShellExecute = false,
-                                    RedirectStandardOutput = true,
-                                    CreateNoWindow = true
-                                }
-                            };
-
-                            if (process.Start())
-                            {
-                                info.PlayerStarted = true;
-                            } 
-
-                            while (!process.StandardOutput.EndOfStream)
-                            {
-                                var line = process.StandardOutput.ReadLine();
-                                Console.WriteLine(line);
-                            }
-                             
-                            process.WaitForExit();
-                              
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("\n Lunching the player failed with an unexpected error:");
-                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                            Console.WriteLine(e.StackTrace);
-                            info.PlayerStarted = false;
-                        }
+                        Console.WriteLine("One or more checks have failed therefore the Player will not be started.");
                     }
                     else
                     {
-                        info.PlayerAvailable = false;
+                        info.PlayerStarted = false;
+                        if (File.Exists(Path.Combine(info.AppFolder, info.AppName)))
+                        {
+                            try
+                            {
+                                var process = new Process
+                                {
+                                    StartInfo = new ProcessStartInfo
+                                    {
+                                        FileName = Path.Combine(info.AppFolder, info.AppName),
+                                        Arguments = string.Join(" ", args),
+                                        UseShellExecute = false,
+                                        RedirectStandardOutput = true,
+                                        CreateNoWindow = true
+                                    }
+                                };
+
+                                if (process.Start())
+                                {
+                                    info.PlayerStarted = true;
+                                }
+
+                                while (!process.StandardOutput.EndOfStream)
+                                {
+                                    var line = process.StandardOutput.ReadLine();
+                                    Console.WriteLine(line);
+                                }
+
+                                process.WaitForExit();
+
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("\n Lunching the player failed with an unexpected error:");
+                                Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                                Console.WriteLine(e.StackTrace);
+                                info.PlayerStarted = false;
+                            }
+                        }
+                        else
+                        {
+                            info.PlayerAvailable = false;
+                        }
                     }
                 }
 
@@ -1641,8 +1651,12 @@ namespace ReadinessTool
                 #endregion
 
                 #region WRITE INFO
-                string _fileName = "Readiness_" + DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss") + ".txt";
-                string _filePath = System.IO.Path.Combine(strOutputPath, _fileName);
+
+                //the current time will be used for all output files
+                string currentTime = DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss");
+
+                resultFileNameText = resultFileNameText + currentTime + ".txt";
+                string _filePath = System.IO.Path.Combine(strOutputPath, resultFileNameText);
 
                 try
                 {
@@ -1690,6 +1704,8 @@ namespace ReadinessTool
                 }
 
                 //write the results to a yaml file
+                resultFileNameYaml = resultFileNameYaml + currentTime + ".yaml";
+                resultFilePathYaml = System.IO.Path.Combine(strOutputPath, resultFileNameYaml);
                 StringBuilder sb = new StringBuilder();
                 StringWriter writer = new StringWriter(sb);
 
@@ -1705,6 +1721,9 @@ namespace ReadinessTool
                 if (!Silent) { Console.WriteLine("Result file written to file " + resultFilePathYaml); }
 
                 //write the results to a json file
+
+                resultFileNameJson = resultFileNameJson + currentTime + ".json";
+                resultFilePathJson = System.IO.Path.Combine(strOutputPath, resultFileNameJson);
 
                 string jsonString = JsonSerializer.Serialize(checkResults);
                 File.WriteAllText(resultFilePathJson, jsonString);

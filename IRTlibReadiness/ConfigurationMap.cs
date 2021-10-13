@@ -28,7 +28,7 @@ namespace ReadinessTool
                 parameterValue = new ParameterValue();
                 parameterValue.PurposeInfo = "Determines if the Player should be started";
                 parameterValue.AllowedValuesInfo = new string[3] { "startbefore", "startafter", "nostart" };
-                parameterValue.Value = "nostart";
+                parameterValue.Value = "startafter";
                 this.Parameters.Add(parameterKey, parameterValue);
             }
 
@@ -212,7 +212,7 @@ namespace ReadinessTool
                 checkValue = new CheckValue
                 {
                     PurposeInfo = "Checks if the internet is reachable",
-                    OptionalCheck = false,
+                    OptionalCheck = true,
                     RunThisCheck = true,
                     ValidValues = new List<ValidValue>(),
                     UnitInfo = "-"
@@ -311,13 +311,13 @@ namespace ReadinessTool
                 checkValue = new CheckValue
                 {
                     PurposeInfo = "Checks the data transfer speed",
-                    OptionalCheck = false,
+                    OptionalCheck = true,
                     RunThisCheck = true,
                     ValidValues = new List<ValidValue>(),
                     UnitInfo = "MB/s"
                 };
-                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedRead", "25"));
-                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedWrite", "20"));
+                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedRead", "20"));
+                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedWrite", "7"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
