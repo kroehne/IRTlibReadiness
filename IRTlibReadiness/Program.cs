@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Management;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -1591,13 +1590,14 @@ namespace ReadinessTool
                     //don't start the player if the overall result is false
                     if (!checkResults.OverallResult)
                     {
-                        Console.WriteLine("One or more checks have failed therefore the Player will not be started.");
+                        if(!Silent) Console.WriteLine("One or more checks have failed therefore the Player will not be started.");
                     }
                     else
                     {
                         info.PlayerStarted = false;
                         if (File.Exists(Path.Combine(info.AppFolder, info.AppName)))
                         {
+                            if (!Silent) Console.WriteLine("The Player will now be started...");
                             try
                             {
                                 var process = new Process
@@ -1620,7 +1620,7 @@ namespace ReadinessTool
                                 while (!process.StandardOutput.EndOfStream)
                                 {
                                     var line = process.StandardOutput.ReadLine();
-                                    Console.WriteLine(line);
+                                    if (!Silent) Console.WriteLine(line);
                                 }
 
                                 process.WaitForExit();
@@ -1628,14 +1628,17 @@ namespace ReadinessTool
                             }
                             catch (Exception e)
                             {
-                                Console.WriteLine("\n Lunching the player failed with an unexpected error:");
+                                Console.WriteLine("\n Launching the player failed with an unexpected error:");
                                 Console.WriteLine("\t" + e.GetType() + " " + e.Message);
                                 Console.WriteLine(e.StackTrace);
                                 info.PlayerStarted = false;
                             }
+                            if (!Silent) Console.WriteLine("The Player has terminated.");
+
                         }
                         else
                         {
+                            if (!Silent) Console.WriteLine("The Player could not be started because the executable was not found.");
                             info.PlayerAvailable = false;
                         }
                     }
