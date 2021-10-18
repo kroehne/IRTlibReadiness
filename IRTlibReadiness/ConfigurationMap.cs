@@ -48,7 +48,17 @@ namespace ReadinessTool
                 parameterValue = new ParameterValue();
                 parameterValue.PurposeInfo = "Output of the Readiness tool";
                 parameterValue.AllowedValuesInfo = new string[3] { "Folder name", "USERTEMPFOLDER", "keep empty for the app folder" };
-                parameterValue.Value = "";
+                parameterValue.Value = @"..\ReadinessToolOutput";
+                this.Parameters.Add(parameterKey, parameterValue);
+            }
+
+            parameterKey = "ReadinessCheckScope";
+            if (!this.Parameters.ContainsKey(parameterKey))
+            {
+                parameterValue = new ParameterValue();
+                parameterValue.PurposeInfo = "Scope of the Readiness tool checks";
+                parameterValue.AllowedValuesInfo = new string[2] { "normal", "diagnose" };
+                parameterValue.Value = "normal";
                 this.Parameters.Add(parameterKey, parameterValue);
             }
 
@@ -171,7 +181,7 @@ namespace ReadinessTool
                     ValidValues = new List<ValidValue>(),
                     UnitInfo = "-"
                 };
-                checkValue.ValidValues.Add(new ValidValue("TouchScreenExpected", "true"));
+                checkValue.ValidValues.Add(new ValidValue("TouchScreenExpected", "false"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
@@ -215,7 +225,8 @@ namespace ReadinessTool
                     OptionalCheck = true,
                     RunThisCheck = true,
                     ValidValues = new List<ValidValue>(),
-                    UnitInfo = "-"
+                    UnitInfo = "-",
+                    CheckExec = CheckExecution.diagnoseMode
                 };
                 checkValue.ValidValues.Add(new ValidValue("WebClientURL", "http://www.google.com/"));
                 checkValue.ValidValues.Add(new ValidValue("WebClientURLaccessExpected", "true"));
@@ -314,7 +325,8 @@ namespace ReadinessTool
                     OptionalCheck = true,
                     RunThisCheck = true,
                     ValidValues = new List<ValidValue>(),
-                    UnitInfo = "MB/s"
+                    UnitInfo = "MB/s",
+                    CheckExec = CheckExecution.diagnoseMode
                 };
                 checkValue.ValidValues.Add(new ValidValue("MinimalSpeedRead", "20"));
                 checkValue.ValidValues.Add(new ValidValue("MinimalSpeedWrite", "7"));
@@ -358,7 +370,8 @@ namespace ReadinessTool
                     OptionalCheck = false,
                     RunThisCheck = true,
                     ValidValues = new List<ValidValue>(),
-                    UnitInfo = "Folder , Program file name"
+                    UnitInfo = "Folder , Program file name",
+                    CheckExec = CheckExecution.conditional
                 };
                 checkValue.ValidValues.Add(new ValidValue("", "TestApp.Player.Chromely.exe"));
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
@@ -383,6 +396,7 @@ namespace ReadinessTool
         public CheckValue() 
         {
             ValidValues = new List<ValidValue>();
+            CheckExec = CheckExecution.always;
         }
 
         public CheckValue(bool runThisCheck, bool optionalCheck, string purposeInfo)
@@ -392,9 +406,19 @@ namespace ReadinessTool
             OptionalCheck = optionalCheck;
             UnitInfo = "";
             ValidValues = new List<ValidValue>();
-
+            CheckExec = CheckExecution.always;
+        }
+        public CheckValue(bool runThisCheck, bool optionalCheck, string purposeInfo, CheckExecution checkExec)
+        {
+            PurposeInfo = purposeInfo;
+            RunThisCheck = runThisCheck;
+            OptionalCheck = optionalCheck;
+            UnitInfo = "";
+            ValidValues = new List<ValidValue>();
+            CheckExec = checkExec;
         }
         public string PurposeInfo { get; set; }
+        public CheckExecution CheckExec { get; set; }
         public bool RunThisCheck { get; set; }
         public bool OptionalCheck { get; set; }
         public string UnitInfo { get; set; }
@@ -440,4 +464,12 @@ namespace ReadinessTool
         succeeded,
         skipped
     }
+
+    public enum CheckExecution
+    {
+        always,         //execute the check always
+        diagnoseMode,   //execute only when in diagnose mode
+        conditional     //execution depends on some conditions
+    }
+
 }

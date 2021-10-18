@@ -36,6 +36,8 @@ namespace ReadinessTool
 
             #region ConfigurationData
 
+            bool checkScopeDiagnose = false;
+
             string checkInfo = "";
             CheckValue checkValue = null;
             CheckResult checkResult = null;
@@ -112,7 +114,7 @@ namespace ReadinessTool
 
             //get the Player's folder and file name from the config otherwise keep the initial values
             CheckValue checkValuePlayer = null;
-            checkValuePlayer = configurationMap.CheckRanges.TryGetValue("ExternalSoftwareCheck", out checkValuePlayer) ? checkValuePlayer : new CheckValue(false, false, "Config data missing");
+            checkValuePlayer = configurationMap.CheckRanges.TryGetValue("ExternalSoftwareCheck", out checkValuePlayer) ? checkValuePlayer : new CheckValue(false, false, "Config data missing", CheckExecution.conditional);
             if(checkValuePlayer.ValidValues.Count > 0)
             {
                 info.AppFolder = checkValuePlayer.ValidValues[0].name;
@@ -150,11 +152,21 @@ namespace ReadinessTool
                     string strOutputPathTemp = parameterValue.Value;
                     if (parameterValue.Value.ToUpper().Equals("USERTEMPFOLDER")) { strOutputPathTemp = Path.GetTempPath(); };
 
-                    if (Directory.Exists(strOutputPathTemp))
+                    strOutputPathTemp  = System.IO.Path.Combine(strWorkPath, strOutputPathTemp);
+
+
+                    try
                     {
+                        DirectoryInfo dirInfo;
+                        // Determine whether the directory exists.
+                        if (!Directory.Exists(strOutputPathTemp))
+                        {
+                            // Try to create the directory.
+                            dirInfo = Directory.CreateDirectory(strOutputPathTemp);
+                            Console.WriteLine("The directory was created successfully at {0}.", Directory.GetCreationTime(strOutputPathTemp));
+                        }
                         if (HasWritePermissionOnDir(strOutputPathTemp))
                         {
-
                             strOutputPath = strOutputPathTemp;
                             resultFilePathYaml = System.IO.Path.Combine(strOutputPath, resultFileNameYaml);
                             resultFilePathJson = System.IO.Path.Combine(strOutputPath, resultFileNameJson);
@@ -164,13 +176,19 @@ namespace ReadinessTool
                             Console.WriteLine(String.Format("Could not set the output to: {0} - folder not writable\nOutput written to {1}", strOutputPathTemp, strOutputPath));
                         }
                     }
-                    else
+                    catch (Exception e)
                     {
-                        Console.WriteLine(String.Format("Could not set the output to: {0} - folder doesn't exist\n0utput written to {1}", strOutputPathTemp, strOutputPath));
+                        Console.WriteLine("The process failed: {0}", e.ToString());
                     }
                 }
                 //otherwise the initial values (all files are written to the app folder) are valid
             }
+            if (configurationMap.Parameters.TryGetValue("ReadinessCheckScope", out parameterValue))
+            {
+                checkScopeDiagnose = parameterValue.Value.ToLower().Equals("diagnose");
+                //otherwise "normal"
+            }
+
             #endregion
 
             info.AppFolder = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
@@ -218,6 +236,13 @@ namespace ReadinessTool
                             Verbose = true;
                         }
                     }
+
+                    if (Configuration["ReadinessCheckScope"] != null)
+                    {
+                        checkScopeDiagnose = Configuration["ReadinessCheckScope"].ToString().ToLower() == "diagnose";
+                        //otherwise "normal"
+                    }
+
                     //the check values previously were taken from the command line
                     //now the values are located in the yaml file therefore the code below is inactive
                     /*
@@ -429,7 +454,7 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
@@ -486,7 +511,7 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
@@ -525,7 +550,7 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
@@ -566,7 +591,7 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!checkValue.RunThisCheck || (checkValue.CheckExec == CheckExecution.diagnoseMode && checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
@@ -627,61 +652,63 @@ namespace ReadinessTool
                 #endregion
 
                 #region VIRUS
-                try
-                {
-                    using (var searcher = new ManagementObjectSearcher(@"\\" + Environment.MachineName + @"\root\SecurityCenter2", "SELECT * FROM AntivirusProduct"))
-                    {
-                        var searcherInstance = searcher.Get();
-                        foreach (var instance in searcherInstance)
-                        {
-                            string displayName = "unknown";
-                            string productState = "unknown";
-                            string timestamp = "unknown";
-                            string pathToSignedProductExe = "unknown";
-                            string pathToSignedReportingExe = "unknown";
-
-                            //some of the properties may not be present
-                            try { var ts = instance.GetPropertyValue("displayName"); displayName = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property displayName not found"); }
-                            try { var ts = instance.GetPropertyValue("productState"); productState = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property productState not found"); }
-                            try { var ts = instance.GetPropertyValue("timestamp"); timestamp = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property timestamp not found"); }
-                            try { var ts = instance.GetPropertyValue("pathToSignedProductExe"); pathToSignedProductExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedProductExe not found"); }
-                            try { var ts = instance.GetPropertyValue("pathToSignedReportingExe"); pathToSignedReportingExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedReportingExe not found"); }
-
-                            info.VirusDetais.Add(String.Format("Name: {0}, State {1}, Timestamp {2}, ProductExe {3}, ReportingExe: {4}",
-                                displayName,
-                                productState,
-                                timestamp,
-                                pathToSignedProductExe,
-                                pathToSignedReportingExe));
-                        }
-
-                        if (!Silent)
-                        {
-                            Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine(" - Virus Applications: {0} Application(s) found", info.VirusDetais.Count);
-                            if (Verbose)
-                            {
-                                foreach (var s in info.VirusDetais)
-                                    Console.WriteLine("   " + s);
-                            }
-                        }
-
-                    }
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine("\nVirus software detection failed with an unexpected error:");
-                    Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                    Console.WriteLine(e.StackTrace);
-                }
-
                 //anti virus software check check
                 checkInfo = "AntiVirusSoftwareCheck";
                 checkResult = new CheckResult(ResultType.failed, "");
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (CanExecute(checkValue,checkScopeDiagnose))
+                {
+                    try
+                    {
+                        using (var searcher = new ManagementObjectSearcher(@"\\" + Environment.MachineName + @"\root\SecurityCenter2", "SELECT * FROM AntivirusProduct"))
+                        {
+                            var searcherInstance = searcher.Get();
+                            foreach (var instance in searcherInstance)
+                            {
+                                string displayName = "unknown";
+                                string productState = "unknown";
+                                string timestamp = "unknown";
+                                string pathToSignedProductExe = "unknown";
+                                string pathToSignedReportingExe = "unknown";
+
+                                //some of the properties may not be present
+                                try { var ts = instance.GetPropertyValue("displayName"); displayName = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property displayName not found"); }
+                                try { var ts = instance.GetPropertyValue("productState"); productState = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property productState not found"); }
+                                try { var ts = instance.GetPropertyValue("timestamp"); timestamp = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property timestamp not found"); }
+                                try { var ts = instance.GetPropertyValue("pathToSignedProductExe"); pathToSignedProductExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedProductExe not found"); }
+                                try { var ts = instance.GetPropertyValue("pathToSignedReportingExe"); pathToSignedReportingExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedReportingExe not found"); }
+
+                                info.VirusDetais.Add(String.Format("Name: {0}, State {1}, Timestamp {2}, ProductExe {3}, ReportingExe: {4}",
+                                    displayName,
+                                    productState,
+                                    timestamp,
+                                    pathToSignedProductExe,
+                                    pathToSignedReportingExe));
+                            }
+
+                            if (!Silent)
+                            {
+                                Console.ForegroundColor = ConsoleColor.White;
+                                Console.WriteLine(" - Virus Applications: {0} Application(s) found", info.VirusDetais.Count);
+                                if (Verbose)
+                                {
+                                    foreach (var s in info.VirusDetais)
+                                        Console.WriteLine("   " + s);
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("\nVirus software detection failed with an unexpected error:");
+                        Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                        Console.WriteLine(e.StackTrace);
+                    }
+                }
+
+                if (!checkValue.RunThisCheck || (checkValue.CheckExec == CheckExecution.diagnoseMode && checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
@@ -713,99 +740,99 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
                 }
                 else
                 {
-                        try
+                    try
+                    {
+                        ValidValue srH = checkValue.ValidValues.Find(item => item.name == "MinimalHorizontalRes");
+                        ValidValue srV = checkValue.ValidValues.Find(item => item.name == "MinimalVerticalRes");
+
+                        if (srH != null && srH != null)
                         {
-                            ValidValue srH = checkValue.ValidValues.Find(item => item.name == "MinimalHorizontalRes");
-                            ValidValue srV = checkValue.ValidValues.Find(item => item.name == "MinimalVerticalRes");
-
-                            if (srH != null && srH != null)
+                            try
                             {
-                                try
-                                {
-                                    info.MinimalWidth = Convert.ToInt32(srH.value);
-                                    info.MinimalHeight = Convert.ToInt32(srV.value);
-                                }
-                                catch (OverflowException)
-                                {
-                                    Console.WriteLine("{0} or {1} is outside the range of the Int32 type.", srH.value, srV.value);
-                                }
-                                catch (FormatException)
-                                {
-                                    Console.WriteLine("The {0} or {1} value '{2}' or {3} is not in a recognizable format.",
-                                                      srH.value.GetType().Name, srV.value.GetType().Name, srH.value, srV.value);
-                                }
+                                info.MinimalWidth = Convert.ToInt32(srH.value);
+                                info.MinimalHeight = Convert.ToInt32(srV.value);
                             }
-                            else
+                            catch (OverflowException)
                             {
-                                checkResult.ResultInfo = "Config data incomplete, using defaults: " + checkInfo;
+                                Console.WriteLine("{0} or {1} is outside the range of the Int32 type.", srH.value, srV.value);
                             }
-
-                            info.MinimalScreenSizeCheck = false;
-                            info.MinimalScreenSize = String.Format("{0}x{1}", info.MinimalWidth, info.MinimalHeight);
-                            var gr = Display.GetGraphicsAdapters();
-                            foreach (var g in gr)
+                            catch (FormatException)
                             {
-                                var _monitors = Display.GetMonitors(g.DeviceName);
-                                string _monitorName = g.DeviceName.Replace(@"\\.\", "");
-                                string _monitorState = "UNKOWN";
-                                if (_monitors.Count > 0)
-                                {
-                                    _monitorName = String.Format("{0} ({1})", g.DeviceName.Replace(@"\\.\", ""), _monitors[0].DeviceString);
-                                    _monitorState = _monitors[0].StateFlags.ToString();
-                                }
-                                var _mode = Display.GetDeviceMode(g.DeviceName);
-                                info.MonitorDetails.Add(String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState));
-
-                                //check the size
-                                //at least one of the displays must meet the check values
-                                if (_mode.dmPelsWidth >= info.MinimalWidth && _mode.dmPelsHeight >= info.MinimalHeight)
-                                {
-                                    //SystemInfo structure:
-                                    info.MinimalScreenSizeCheck = true;
-
-                                }
-                                //checkResult structure
-                                if (_mode.dmPelsWidth >= info.MinimalWidth && _mode.dmPelsHeight >= info.MinimalHeight)
-                                {
-                                    if (!checkResults.CheckResultMap.ContainsKey(checkInfo))
-                                        //add the check result for the current monitor
-                                        checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.succeeded, String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState)));
-                                    else
-                                        //append the check result of the current monitor to the existing one
-                                        checkResults.CheckResultMap[checkInfo].ResultInfo += String.Format(" ; {0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState);
-                                }
-                            }//end foreach
-
-                            //if there were no suitable monitors found add a negative check result
-                            if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = false; checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.failed, "No suitable monitors found")); }
-
-                            if (!Silent)
-                            {
-                                Console.ForegroundColor = ConsoleColor.White;
-                                Console.WriteLine(" - Displays: {0} device(s) (Minimal Size: {1} - {2}) ", info.MonitorDetails.Count, info.MinimalScreenSize, info.MinimalScreenSizeCheck);
-                                if (Verbose)
-                                {
-                                    foreach (var s in info.MonitorDetails)
-                                        Console.WriteLine("   " + s);
-                                }
-
+                                Console.WriteLine("The {0} or {1} value '{2}' or {3} is not in a recognizable format.",
+                                                    srH.value.GetType().Name, srV.value.GetType().Name, srH.value, srV.value);
                             }
-                        }//end try
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("\nReading graphic devices failed with an unexpected error:");
-                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                            Console.WriteLine(e.StackTrace);
-                            //in case an error occurred add a negative check result
-                            if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = false; checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.failed, "Check has failed. An unexpected error occurred")); }
                         }
+                        else
+                        {
+                            checkResult.ResultInfo = "Config data incomplete, using defaults: " + checkInfo;
+                        }
+
+                        info.MinimalScreenSizeCheck = false;
+                        info.MinimalScreenSize = String.Format("{0}x{1}", info.MinimalWidth, info.MinimalHeight);
+                        var gr = Display.GetGraphicsAdapters();
+                        foreach (var g in gr)
+                        {
+                            var _monitors = Display.GetMonitors(g.DeviceName);
+                            string _monitorName = g.DeviceName.Replace(@"\\.\", "");
+                            string _monitorState = "UNKOWN";
+                            if (_monitors.Count > 0)
+                            {
+                                _monitorName = String.Format("{0} ({1})", g.DeviceName.Replace(@"\\.\", ""), _monitors[0].DeviceString);
+                                _monitorState = _monitors[0].StateFlags.ToString();
+                            }
+                            var _mode = Display.GetDeviceMode(g.DeviceName);
+                            info.MonitorDetails.Add(String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState));
+
+                            //check the size
+                            //at least one of the displays must meet the check values
+                            if (_mode.dmPelsWidth >= info.MinimalWidth && _mode.dmPelsHeight >= info.MinimalHeight)
+                            {
+                                //SystemInfo structure:
+                                info.MinimalScreenSizeCheck = true;
+
+                            }
+                            //checkResult structure
+                            if (_mode.dmPelsWidth >= info.MinimalWidth && _mode.dmPelsHeight >= info.MinimalHeight)
+                            {
+                                if (!checkResults.CheckResultMap.ContainsKey(checkInfo))
+                                    //add the check result for the current monitor
+                                    checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.succeeded, String.Format("{0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState)));
+                                else
+                                    //append the check result of the current monitor to the existing one
+                                    checkResults.CheckResultMap[checkInfo].ResultInfo += String.Format(" ; {0}: {1}x{2}-{3}", _monitorName, _mode.dmPelsWidth, _mode.dmPelsHeight, _monitorState);
+                            }
+                        }//end foreach
+
+                        //if there were no suitable monitors found add a negative check result
+                        if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = false; checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.failed, "No suitable monitors found")); }
+
+                        if (!Silent)
+                        {
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.WriteLine(" - Displays: {0} device(s) (Minimal Size: {1} - {2}) ", info.MonitorDetails.Count, info.MinimalScreenSize, info.MinimalScreenSizeCheck);
+                            if (Verbose)
+                            {
+                                foreach (var s in info.MonitorDetails)
+                                    Console.WriteLine("   " + s);
+                            }
+
+                        }
+                    }//end try
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("\nReading graphic devices failed with an unexpected error:");
+                        Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                        Console.WriteLine(e.StackTrace);
+                        //in case an error occurred add a negative check result
+                        if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = false; checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.failed, "Check has failed. An unexpected error occurred")); }
+                    }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
                 checkResults.CheckResultMap[checkInfo].ResultInfo +=String.Format(" (expected: {0}, {1})", info.MinimalWidth, info.MinimalHeight);
@@ -818,19 +845,21 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
                 }
                 else
                 {
-                        ValidValue touchScreenExpected = checkValue.ValidValues.Find(item => item.name == "TouchScreenExpected");
-                        if (touchScreenExpected != null)
-                        {
-                            if (touchScreenExpected.value.ToLower().Equals("true")) { if (info.TouchEnabled == true) checkResult.Result = ResultType.succeeded; }
-                            checkResult.ResultInfo = String.Format("Touch screen present: {0} (expected: {1})", info.TouchEnabled, touchScreenExpected.value);
-                        }
+                    ValidValue touchScreenExpected = checkValue.ValidValues.Find(item => item.name == "TouchScreenExpected");
+                    if (touchScreenExpected != null)
+                    {
+                        bool _touchScreenExpected = touchScreenExpected.value.ToLower().Equals("true");
+
+                        if (info.TouchEnabled == _touchScreenExpected) checkResult.Result = ResultType.succeeded;
+                        checkResult.ResultInfo = String.Format("Touch screen present: {0} (expected: {1})", info.TouchEnabled, touchScreenExpected.value);
+                    }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
@@ -843,48 +872,48 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
                 }
                 else
                 {
-                        try
+                    try
+                    {
+                        var _audioSearcher = new ManagementObjectSearcher("SELECT * FROM Win32_SoundDevice");
+                        var _audioCollection = _audioSearcher.Get();
+                        info.NumberOfAudioDevices = _audioCollection.Count;
+                        foreach (var d in _audioCollection)
                         {
-                            var _audioSearcher = new ManagementObjectSearcher("SELECT * FROM Win32_SoundDevice");
-                            var _audioCollection = _audioSearcher.Get();
-                            info.NumberOfAudioDevices = _audioCollection.Count;
-                            foreach (var d in _audioCollection)
+                            info.AudioDetails.Add(String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status")));
+
+                            if (!checkResults.CheckResultMap.ContainsKey(checkInfo))
+                                //add the check result for the current monitor
+                                checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.succeeded, String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status"))));
+                            else
+                                //append the check result of the current monitor to the existing one
+                                checkResults.CheckResultMap[checkInfo].ResultInfo += String.Format(" ; Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status"));
+
+                        }
+
+                        if (!Silent)
+                        {
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.WriteLine(" - Audio: {0} device(s) (Test: {1}) ", info.NumberOfAudioDevices, info.PlayTestSuccess);
+                            if (Verbose)
                             {
-                                info.AudioDetails.Add(String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status")));
-
-                                if (!checkResults.CheckResultMap.ContainsKey(checkInfo))
-                                    //add the check result for the current monitor
-                                    checkResults.CheckResultMap.Add(checkInfo, new CheckResult(ResultType.succeeded, String.Format("Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status"))));
-                                else
-                                    //append the check result of the current monitor to the existing one
-                                    checkResults.CheckResultMap[checkInfo].ResultInfo += String.Format(" ; Name: {0}, Status: {1}", d.GetPropertyValue("Name"), d.GetPropertyValue("Status"));
-
-                            }
-
-                            if (!Silent)
-                            {
-                                Console.ForegroundColor = ConsoleColor.White;
-                                Console.WriteLine(" - Audio: {0} device(s) (Test: {1}) ", info.NumberOfAudioDevices, info.PlayTestSuccess);
-                                if (Verbose)
-                                {
-                                    foreach (var s in info.AudioDetails)
-                                        Console.WriteLine("   " + s);
-                                }
+                                foreach (var s in info.AudioDetails)
+                                    Console.WriteLine("   " + s);
                             }
                         }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("\nReading audio devices failed with an unexpected error:");
-                            Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                            Console.WriteLine(e.StackTrace);
-                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("\nReading audio devices failed with an unexpected error:");
+                        Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                        Console.WriteLine(e.StackTrace);
+                    }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
@@ -893,33 +922,33 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
                 }
                 else
                 {
-                        try
+                    try
+                    {
+                        info.PlayTestSuccess = true;
+                        using (MidiOut midiOut = new MidiOut(0))
                         {
-                            info.PlayTestSuccess = true;
-                            using (MidiOut midiOut = new MidiOut(0))
-                            {
-                                midiOut.Send(MidiMessage.StartNote(60, 127, 1).RawData);
-                                Thread.Sleep(1000);
-                                midiOut.Send(MidiMessage.StopNote(60, 0, 1).RawData);
-                                Thread.Sleep(1000);
+                            midiOut.Send(MidiMessage.StartNote(60, 127, 1).RawData);
+                            Thread.Sleep(1000);
+                            midiOut.Send(MidiMessage.StopNote(60, 0, 1).RawData);
+                            Thread.Sleep(1000);
 
-                                checkResult.Result = ResultType.succeeded;
-                                checkResult.ResultInfo = "Midi tone was played successfully";
-                            }
+                            checkResult.Result = ResultType.succeeded;
+                            checkResult.ResultInfo = "Midi tone was played successfully";
                         }
-                        catch
-                        {
-                            info.PlayTestSuccess = false;
-                            checkResult.ResultInfo = "Error while playing midi tone";
+                    }
+                    catch
+                    {
+                        info.PlayTestSuccess = false;
+                        checkResult.ResultInfo = "Error while playing midi tone";
 
-                        }
+                    }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
@@ -931,74 +960,73 @@ namespace ReadinessTool
                 checkInfo = "NetworkConnectivityCheck";
                 checkResult = new CheckResult(ResultType.failed, "");
 
-                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing", CheckExecution.diagnoseMode);
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
                 }
                 else
                 {
+                    ValidValue webClientURL = checkValue.ValidValues.Find(item => item.name == "WebClientURL");
+                    ValidValue webClientURLaccessExpected = checkValue.ValidValues.Find(item => item.name == "WebClientURLaccessExpected");
 
-                        ValidValue webClientURL = checkValue.ValidValues.Find(item => item.name == "WebClientURL");
-                        ValidValue webClientURLaccessExpected = checkValue.ValidValues.Find(item => item.name == "WebClientURLaccessExpected");
+                    if (webClientURL != null && webClientURLaccessExpected != null)
+                    {
+                        try
+                        {
+                            using (WebClient client = new WebClient())
+                            {
+                                using (client.OpenRead(webClientURL.value))
+                                {
+                                    info.OpenReadSucces = true;
+                                    checkResult.ResultInfo = String.Format("Access to {0} successful", webClientURL.value);
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            info.OpenReadSucces = false;
+                            checkResult.ResultInfo = String.Format("Access to {0} failed", webClientURL.value);
+                        }
+                        ValidValue pingURL = checkValue.ValidValues.Find(item => item.name == "PingURL");
+                        ValidValue pingURLaccessExpected = checkValue.ValidValues.Find(item => item.name == "PingURLaccessExpected");
 
-                        if (webClientURL != null && webClientURLaccessExpected != null)
+                        if (pingURL != null && pingURLaccessExpected != null)
                         {
                             try
                             {
-                                using (WebClient client = new WebClient())
+                                using (var ping = new Ping())
                                 {
-                                    using (client.OpenRead(webClientURL.value))
+                                    var reply = ping.Send(pingURL.value);
+                                    if (reply != null && reply.Status == IPStatus.Success)
                                     {
-                                        info.OpenReadSucces = true;
-                                        checkResult.ResultInfo = String.Format("Access to {0} successful", webClientURL.value);
+                                        info.PingSucces = true;
+                                        checkResult.ResultInfo += String.Format(" ; Ping of {0} successful", pingURL.value);
+                                    }
+                                    else
+                                    {
+                                        checkResult.ResultInfo += String.Format(" ; Ping of {0} failed", pingURL.value);
                                     }
                                 }
                             }
                             catch
                             {
-                                info.OpenReadSucces = false;
-                                checkResult.ResultInfo = String.Format("Access to {0} failed", webClientURL.value);
-                            }
-                            ValidValue pingURL = checkValue.ValidValues.Find(item => item.name == "PingURL");
-                            ValidValue pingURLaccessExpected = checkValue.ValidValues.Find(item => item.name == "PingURLaccessExpected");
-
-                            if (pingURL != null && pingURLaccessExpected != null)
-                            {
-                                try
-                                {
-                                    using (var ping = new Ping())
-                                    {
-                                        var reply = ping.Send(pingURL.value);
-                                        if (reply != null && reply.Status == IPStatus.Success)
-                                        {
-                                            info.PingSucces = true;
-                                            checkResult.ResultInfo += String.Format(" ; Ping of {0} successful", pingURL.value);
-                                        }
-                                        else
-                                        {
-                                            checkResult.ResultInfo += String.Format(" ; Ping of {0} failed", pingURL.value);
-                                        }
-                                    }
-                                }
-                                catch
-                                {
-                                    info.PingSucces = false;
-                                    checkResult.ResultInfo += String.Format(" ; Ping of {0} failed", pingURL.value);
-                                }
-
-                                if (info.OpenReadSucces && info.PingSucces) checkResult.Result = ResultType.succeeded;
+                                info.PingSucces = false;
+                                checkResult.ResultInfo += String.Format(" ; Ping of {0} failed", pingURL.value);
                             }
 
-                            if (!Silent)
-                            {
-                                Console.ForegroundColor = ConsoleColor.White;
-                                Console.WriteLine(" - Network Connectivity: Ping = {0}, OpenRead = {1}", info.PingSucces, info.OpenReadSucces);
-                            }
-
+                            if (info.OpenReadSucces && info.PingSucces) checkResult.Result = ResultType.succeeded;
                         }
+
+                        if (!Silent)
+                        {
+                            Console.ForegroundColor = ConsoleColor.White;
+                            Console.WriteLine(" - Network Connectivity: Ping = {0}, OpenRead = {1}", info.PingSucces, info.OpenReadSucces);
+                        }
+
+                    }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
@@ -1011,61 +1039,68 @@ namespace ReadinessTool
                  * b) if ports provided in a list are available (PortAvailableCheck)
                  * 
                  */
-                try
+                CheckValue cv1 = null;
+                CheckValue cv2 = null;
+                configurationMap.CheckRanges.TryGetValue("PortRangeAvailableCheck", out cv1);
+                configurationMap.CheckRanges.TryGetValue("PortAvailableCheck", out cv2);
+
+                if(CanExecute(cv1, checkScopeDiagnose) || CanExecute(cv2, checkScopeDiagnose))
                 {
-
-                    IPGlobalProperties properties = IPGlobalProperties.GetIPGlobalProperties();
-                    TcpConnectionInformation[] connections = properties.GetActiveTcpConnections();
-                    foreach (TcpConnectionInformation c in connections)
+                    try
                     {
-                        if (!info.UsedPorts.Contains(c.LocalEndPoint.Port))
-                            info.UsedPorts.Add(c.LocalEndPoint.Port);
-                    }
-
-                    if (!Silent)
-                    {
-                        Console.ForegroundColor = ConsoleColor.White;
-                        Console.WriteLine(" - Local TCP/IP ports: {0} ports used", info.UsedPorts.Count);
-                        if (Verbose)
+                        IPGlobalProperties properties = IPGlobalProperties.GetIPGlobalProperties();
+                        TcpConnectionInformation[] connections = properties.GetActiveTcpConnections();
+                        foreach (TcpConnectionInformation c in connections)
                         {
-                            Console.WriteLine("    " + string.Join(",", info.UsedPorts));
-                        }
-                    }
-
-                    if (info.DoPortScan)
-                    {
-                        int _port = info.StartScanMin;
-                        int _i = 0;
-
-                        while (info.FreePorts.Count < info.RequiredNumberOfPorts & _i < info.NumberOfPortsToCheck)
-                        {
-                            if (!info.UsedPorts.Contains(_port))
-                            {
-                                if (!IsPortOpen("127.0.0.1", _port, new TimeSpan(250)))
-                                {
-                                    info.FreePorts.Add(_port);
-                                }
-                            }
-                            _port++;
-                            _i++;
+                            if (!info.UsedPorts.Contains(c.LocalEndPoint.Port))
+                                info.UsedPorts.Add(c.LocalEndPoint.Port);
                         }
 
                         if (!Silent)
                         {
                             Console.ForegroundColor = ConsoleColor.White;
-                            Console.WriteLine(" - Check open TCP/IP ports: >= {0} of {1} ports available", info.FreePorts.Count, info.RequiredNumberOfPorts);
+                            Console.WriteLine(" - Local TCP/IP ports: {0} ports used", info.UsedPorts.Count);
                             if (Verbose)
                             {
-                                Console.WriteLine("    " + string.Join(",", info.FreePorts));
+                                Console.WriteLine("    " + string.Join(",", info.UsedPorts));
+                            }
+                        }
+
+                        if (info.DoPortScan)
+                        {
+                            int _port = info.StartScanMin;
+                            int _i = 0;
+
+                            while (info.FreePorts.Count < info.RequiredNumberOfPorts & _i < info.NumberOfPortsToCheck)
+                            {
+                                if (!info.UsedPorts.Contains(_port))
+                                {
+                                    if (!IsPortOpen("127.0.0.1", _port, new TimeSpan(250)))
+                                    {
+                                        info.FreePorts.Add(_port);
+                                    }
+                                }
+                                _port++;
+                                _i++;
+                            }
+
+                            if (!Silent)
+                            {
+                                Console.ForegroundColor = ConsoleColor.White;
+                                Console.WriteLine(" - Check open TCP/IP ports: >= {0} of {1} ports available", info.FreePorts.Count, info.RequiredNumberOfPorts);
+                                if (Verbose)
+                                {
+                                    Console.WriteLine("    " + string.Join(",", info.FreePorts));
+                                }
                             }
                         }
                     }
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine("\nPort listing failed with an unexpected error:");
-                    Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                    Console.WriteLine(e.StackTrace);
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("\nPort listing failed with an unexpected error:");
+                        Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                        Console.WriteLine(e.StackTrace);
+                    }
                 }
 
                 //port checks
@@ -1076,43 +1111,43 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
-                    checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
+                        checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
                 }
                 else
                 {
-                        ValidValue firstPort = checkValue.ValidValues.Find(item => item.name == "FirstPort");
-                        ValidValue lastPort = checkValue.ValidValues.Find(item => item.name == "LastPort");
-                        ValidValue minimumPortsFree = checkValue.ValidValues.Find(item => item.name == "MinimumPortsFree");
+                    ValidValue firstPort = checkValue.ValidValues.Find(item => item.name == "FirstPort");
+                    ValidValue lastPort = checkValue.ValidValues.Find(item => item.name == "LastPort");
+                    ValidValue minimumPortsFree = checkValue.ValidValues.Find(item => item.name == "MinimumPortsFree");
 
-                        if (firstPort != null && lastPort != null && minimumPortsFree != null) {
+                    if (firstPort != null && lastPort != null && minimumPortsFree != null) {
 
-                            long _firstPort = 0;
-                            long _lastPort = 0;
-                            long _minimumPortsFree = 0;
+                        long _firstPort = 0;
+                        long _lastPort = 0;
+                        long _minimumPortsFree = 0;
 
-                            if (long.TryParse(firstPort.value, out _firstPort) && long.TryParse(lastPort.value, out _lastPort) && long.TryParse(minimumPortsFree.value, out _minimumPortsFree))
+                        if (long.TryParse(firstPort.value, out _firstPort) && long.TryParse(lastPort.value, out _lastPort) && long.TryParse(minimumPortsFree.value, out _minimumPortsFree))
+                        {
+                            long _freePorts = 0;
+                            //count the number of available ports within the range 
+                            for(long i = _firstPort; i <= _lastPort; i++)
                             {
-                                long _freePorts = 0;
-                                //count the number of available ports within the range 
-                                for(long i = _firstPort; i <= _lastPort; i++)
-                                {
-                                    if (!info.UsedPorts.Contains(i)) _freePorts++;
-                                }
-
-                                if(_freePorts >= _minimumPortsFree) checkResult.Result = ResultType.succeeded;
-
-                                checkResult.ResultInfo = String.Format("{0} ports are available in the range of port {1} to port {2}", _freePorts, _firstPort, _lastPort);
-                                checkResult.ResultInfo += String.Format(" (expected: minimum {0} available ports)", _minimumPortsFree);
-                        }
-                        else
-                            {
-                                checkResult.ResultInfo += "Wrong config value format: ";
+                                if (!info.UsedPorts.Contains(i)) _freePorts++;
                             }
+
+                            if(_freePorts >= _minimumPortsFree) checkResult.Result = ResultType.succeeded;
+
+                            checkResult.ResultInfo = String.Format("{0} ports are available in the range of port {1} to port {2}", _freePorts, _firstPort, _lastPort);
+                            checkResult.ResultInfo += String.Format(" (expected: minimum {0} available ports)", _minimumPortsFree);
+                    }
+                    else
+                        {
+                            checkResult.ResultInfo += "Wrong config value format: ";
                         }
-                        else { checkResult.ResultInfo += "Config data partly missing";}
+                    }
+                    else { checkResult.ResultInfo += "Config data partly missing";}
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
 
@@ -1202,7 +1237,7 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
@@ -1245,7 +1280,7 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
@@ -1315,15 +1350,15 @@ namespace ReadinessTool
                 checkInfo = "DriveSpeedCheck";
                 checkResult = new CheckResult(ResultType.failed, "");
 
-                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
-
-                if (!checkValue.RunThisCheck)
+                checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing", CheckExecution.diagnoseMode);
+                //if (!checkValue.RunThisCheck || (checkValue.CheckExec == CheckExecution.diagnoseMode && checkScopeDiagnose))
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
                 }
-
-                info.DoDriveSpeedTest = checkValue.RunThisCheck;
+                else
+                    info.DoDriveSpeedTest = true;
 
                 if (info.DoDriveSpeedTest)
                 { 
@@ -1503,7 +1538,7 @@ namespace ReadinessTool
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
-                if (!checkValue.RunThisCheck)
+                if (!CanExecute(checkValue, checkScopeDiagnose))
                 {
                     checkResult.Result = checkValue.PurposeInfo.Equals("Config data missing") ? ResultType.failed : ResultType.skipped;
                     checkResult.ResultInfo = checkValue.PurposeInfo;
@@ -1741,6 +1776,20 @@ namespace ReadinessTool
                 Console.WriteLine("\t" + ex.GetType() + " " + ex.Message);
                 Console.WriteLine(ex.StackTrace);
             }
+        }
+
+        public static  bool CanExecute(CheckValue cv, bool checkScopeDiag)
+        {
+            if (cv == null) return false;
+            //don't execute the check if RunThisCheck is false
+            if (!cv.RunThisCheck) return false;
+            //run the check if it is configured to run in all modes
+            if (cv.CheckExec == CheckExecution.always) return true;
+            //if this check is for diagnose purposes only run the check if the diagnose mode is enabled
+            if (cv.CheckExec == CheckExecution.diagnoseMode) return checkScopeDiag == true;
+            //otherwise skip the check
+            return false;
+
         }
 
         public static bool HasWritePermissionOnDir(string path)
@@ -2006,4 +2055,5 @@ namespace ReadinessTool
         public int dmPanningWidth;
         public int dmPanningHeight;
     }
+
 }
