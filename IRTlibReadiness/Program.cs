@@ -17,6 +17,10 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using YamlDotNet.Serialization;
+using Newtonsoft.Json;
+using System.Linq;
+using System.IO.Compression;
+
 
 /*
  *  Sapling.StorageSpeedMeter based on: https://github.com/maxim-saplin/NetCoreStorageSpeedTest (MIT License)
@@ -46,11 +50,13 @@ namespace ReadinessTool
             string strAssemblyPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
             string strWorkPath = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName);
             string strOutputPath = strWorkPath;
+            string strPlayerResultPath = System.IO.Path.Combine(strWorkPath, "..\\resultfolder");
 
             string configFileNameYaml = "ReadinessConfig.yaml";
             string configFileNameJson = "ReadinessConfig.json";
             string configFilePathYaml = System.IO.Path.Combine(strWorkPath, configFileNameYaml);
             string configFilePathJson = System.IO.Path.Combine(strWorkPath, configFileNameJson);
+            string tempPath = System.IO.Path.Combine(strWorkPath, "temp");
 
             //suffixes for the result output files
             string resultFileNameText = "ReadinessResult_";
@@ -103,13 +109,6 @@ namespace ReadinessTool
             {
                 TotalRam = (double)RamDiskUtil.TotalRam,
                 FreeRam = (double)RamDiskUtil.FreeRam
-                //the flags below are initialized to false, the setting is retrieved from the
-                //assigned CheckValue section within the yaml file
-                //DoDriveSpeedTest = args.Length == 0,
-                //DoPortScan = args.Length == 0,
-                //the flag below is initialized to false, the setting is retrieved from the
-                //assigned Parameter section within the yaml file or from the parameter applied (see below)
-                //DoApplicationStartAfterCheck = args.Length != 0
             };
 
             //get the Player's folder and file name from the config otherwise keep the initial values
@@ -153,7 +152,6 @@ namespace ReadinessTool
                     if (parameterValue.Value.ToUpper().Equals("USERTEMPFOLDER")) { strOutputPathTemp = Path.GetTempPath(); };
 
                     strOutputPathTemp  = System.IO.Path.Combine(strWorkPath, strOutputPathTemp);
-
 
                     try
                     {
@@ -243,109 +241,6 @@ namespace ReadinessTool
                         //otherwise "normal"
                     }
 
-                    //the check values previously were taken from the command line
-                    //now the values are located in the yaml file therefore the code below is inactive
-                    /*
-                    if (Configuration["ReadinessDriveSpeed"] != null)
-                    {
-                        if (Configuration["ReadinessDriveSpeed"].ToString().ToLower() == "true")
-                        {
-                            info.DoDriveSpeedTest = true;
-                        }
-                        else if (Configuration["ReadinessDriveSpeed"].ToString().ToLower() == "false")
-                        {
-                            info.DoDriveSpeedTest = false;
-                        }
-                    }
-                    */
-                    /*
-                    if (Configuration["ReadinessAudio"] != null)
-                    {
-                        if (Configuration["ReadinessAudio"].ToString().ToLower() == "true")
-                        {
-                            info.DoAudioCheck = true;
-                        }
-                        else if (Configuration["ReadinessAudio"].ToString().ToLower() == "false")
-                        {
-                            info.DoAudioCheck = false;
-                        }
-                    }
-                    */
-                    /*
-                    if (Configuration["ReadinessPortScan"] != null)
-                    {
-                        if (Configuration["ReadinessPortScan"].ToString().ToLower() == "true")
-                        {
-                            info.DoPortScan = true;
-                        }
-                        else if (Configuration["ReadinessPortScan"].ToString().ToLower() == "false")
-                        {
-                            info.DoPortScan = false;
-                        }
-                    }
-                    */
-                    /*
-                    if (Configuration["ReadinessPortScanStart"] != null)
-                    {
-                        int _port = -1;
-                        if (int.TryParse(Configuration["ReadinessPortScanStart"].ToString(), out _port))
-                        {
-                            info.StartScanMin = _port;
-                        }
-                    }
-                    */
-                    /*
-                    if (Configuration["ReadinessPortScanRequiredNumber"] != null)
-                    {
-                        int _number = 1;
-                        if (int.TryParse(Configuration["ReadinessPortScanRequiredNumber"].ToString(), out _number))
-                        {
-                            info.RequiredNumberOfPorts = _number;
-                        }
-                    }
-                    */
-                    /*
-                    if (Configuration["ReadinessPortScanNumbersToCheck"] != null)
-                    {
-                        int _number = 1000;
-                        if (int.TryParse(Configuration["ReadinessPortScanNumbersToCheck"].ToString(), out _number))
-                        {
-                            info.NumberOfPortsToCheck = _number;
-                        }
-                    }
-                    */
-                    /*
-                    if (Configuration["ReadinessScreenCheckWidth"] != null)
-                    {
-                        int _width = 1024;
-                        if (int.TryParse(Configuration["ReadinessScreenCheckWidth"].ToString(), out _width))
-                        {
-                            info.MinimalWidth = _width;
-                        }
-                    }
-                    */
-                    /*
-                    if (Configuration["ReadinessScreenCheckHeight"] != null)
-                    {
-                        int _height = 768;
-                        if (int.TryParse(Configuration["ReadinessScreenCheckHeight"].ToString(), out _height))
-                        {
-                            info.MinimalHeight = _height;
-                        }
-                    }
-                    */
-                    /*
-                    if (Configuration["ReadinessAppFolder"] != null)
-                    {
-                        info.AppFolder = Configuration["ReadinessAppFolder"].ToString();
-                    }
-                    */
-                    /*
-                    if (Configuration["ReadinessAppName"] != null)
-                    {
-                        info.AppName = Configuration["ReadinessAppName"].ToString();
-                    }
-                    */
                 }
             }
             catch (Exception e)
@@ -1618,7 +1513,10 @@ namespace ReadinessTool
 
                 #endregion
 
-                #region START PLAYER AFTER 
+                #region START PLAYER AFTER
+                //initialize the time when the player is started to a time long ago
+                //this is used to find the player's output file later
+                DateTime playerStartTime = new DateTime(2000 ,1,1);
 
                 if (info.DoApplicationStartAfterCheck)
                 {
@@ -1649,6 +1547,8 @@ namespace ReadinessTool
 
                                 if (process.Start())
                                 {
+                                    //remember the time when the player is started
+                                    playerStartTime = DateTime.Now;
                                     info.PlayerStarted = true;
                                 }
 
@@ -1688,6 +1588,110 @@ namespace ReadinessTool
 
                 #endregion
 
+                #region GETRESULTFROMPLAYER
+
+                Dictionary<string, string> score = new Dictionary<string, string>();
+                string playerOutputZipFile = "";
+                string playerOutputScoreFile = "";
+
+                //if (info.PlayerStarted)
+                if (true)
+                {
+                    if (Directory.Exists(strPlayerResultPath)) 
+                    {
+                        //find the relevant output of the player
+
+                        DirectoryInfo dirInfo = new DirectoryInfo(strPlayerResultPath);
+                        FileInfo[] files = dirInfo.GetFiles().OrderBy(p => p.CreationTime).ToArray();
+                        foreach (FileInfo file in files)
+                        {
+                            //looking for a file written after the player was started
+                            if(file.CreationTime > playerStartTime) {
+                                if (!Silent) Console.WriteLine("Player output file is: " + file.FullName);
+                                playerOutputZipFile = file.FullName;
+                                break;
+                            }
+                        }
+
+                        //extract the scoring file
+                        //create a temp folder
+                        if (!Directory.Exists(tempPath))
+                        {
+                            try
+                            {
+                                dirInfo = Directory.CreateDirectory(tempPath);
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("The process failed: {0}", e.ToString());
+                            }
+                        }
+
+                        ZipFile.ExtractToDirectory(playerOutputZipFile, tempPath, true);
+                        playerOutputScoreFile = System.IO.Path.Combine(tempPath, "ItemScore.json");
+                        if (!File.Exists(playerOutputScoreFile)) playerOutputScoreFile = "";
+                    }
+                    else
+                    {
+                        if (!Silent) Console.WriteLine("Player output folder not found: " + strPlayerResultPath);
+                        //the player output folder doesn't exist
+                    }
+
+                    if(playerOutputScoreFile.Length > 0)
+                    {
+                        string[] jsonScoreString = File.ReadAllLines(playerOutputScoreFile);
+
+                        for(int lineCnt=0; lineCnt < jsonScoreString.Length; lineCnt++)
+                        {
+                            if (jsonScoreString[lineCnt].EndsWith(',')) { jsonScoreString[lineCnt] = jsonScoreString[lineCnt].Substring(0, jsonScoreString[lineCnt].Length - 1); }
+
+                            JsonTextReader reader = new JsonTextReader(new StringReader(jsonScoreString[lineCnt]));
+
+                            string PropertyName = "";
+
+                            while (reader.Read())
+                            {
+                                if (reader.Value != null)
+                                {
+                                    //Console.WriteLine("Token: {0}, Value: {1}", reader.TokenType, reader.Value);
+
+                                    if (PropertyName.Equals("ItemScore"))
+                                    {
+                                        string[] scoreInfo = reader.Value.ToString().Replace('{', ' ').Replace('}', ' ').Split(',');
+                                        for (int cnt = 0; cnt < scoreInfo.Length; cnt++)
+                                        {
+                                            //remove some disturbing characters
+                                            scoreInfo[cnt] = scoreInfo[cnt].Replace('"', ' ');
+                                            scoreInfo[cnt] = scoreInfo[cnt].Replace('\\', ' ').Trim();
+                                            string[] scoreDetails = scoreInfo[cnt].Split(':');
+                                            if (scoreDetails.Length == 2)
+                                            {
+                                                string key = string.Format("{0}_{1}", lineCnt, scoreDetails[0].Trim());
+                                                score.Add(key, scoreDetails[1].Trim());
+                                                /*
+                                                if (scoreDetails[0].Contains("hit"))
+                                                    if(!score.ContainsKey(scoreDetails[0].Trim()))
+                                                        score.Add(scoreDetails[0].Trim(), scoreDetails[1].Trim());
+                                                */
+                                            }
+                                        }
+                                    }
+
+                                    if (reader.TokenType == JsonToken.PropertyName)
+                                        PropertyName = reader.Value.ToString();
+                                    else
+                                        PropertyName = "";
+                                }
+                                else
+                                {
+                                    //Console.WriteLine("Token: {0}", reader.TokenType);
+                                }
+                            }
+                        }
+                    }
+                }
+                #endregion
+
                 #region WRITE INFO
 
                 //the current time will be used for all output files
@@ -1720,25 +1724,132 @@ namespace ReadinessTool
 
                 if (!Silent)
                 {
+                    bool suitable = true;
+
+                    //ReadinessTool results +
                     if (checkResults.OverallResult)
                         Console.ForegroundColor = ConsoleColor.Green;
                     else
                         Console.ForegroundColor = ConsoleColor.Red;
 
-                    Console.WriteLine("Overall check result is {0} See details below \n", checkResults.OverallResult);
+                    Console.WriteLine(" ");
+                    Console.WriteLine("********************************************************************************");
+                    Console.WriteLine("* The ReadinessTool overall check result is {0} See details below \n", checkResults.OverallResult);
+                    Console.WriteLine("********************************************************************************");
+                    Console.WriteLine(" ");
                     Console.ResetColor();
 
-
-                foreach (KeyValuePair<string, CheckResult> entry in checkResults.CheckResultMap)
+                    foreach (KeyValuePair<string, CheckResult> entry in checkResults.CheckResultMap)
                     {
-
                         if (entry.Value.Result == ResultType.succeeded) Console.ForegroundColor = ConsoleColor.Green;
-                        if (entry.Value.Result == ResultType.failed) Console.ForegroundColor = ConsoleColor.Red;
+                        if (entry.Value.Result == ResultType.failed) { Console.ForegroundColor = ConsoleColor.Red; suitable = false; }
                         if (entry.Value.Result == ResultType.skipped) Console.ForegroundColor = ConsoleColor.Gray;
 
                         Console.WriteLine("{0} - {1} Info: {2}", entry.Value.Result, entry.Key, entry.Value.ResultInfo);
                     }
                     Console.ResetColor();
+                    //ReadinessTool results -
+
+                    //IRTlibPlayer results +
+                    string strValue = "";
+                    int intValue = 0;
+
+                    Console.WriteLine(" ");
+                    Console.WriteLine("********************************************************************************");
+                    Console.WriteLine("* IRTlibPlayer system diagnose");
+                    Console.WriteLine("********************************************************************************");
+                    Console.WriteLine(" ");
+                    Console.ResetColor();
+
+                    string[] hitNames = { "0_hit.hit01_KIOSK", "0_hit.hit02_TOUCH", "0_hit.hit03_AUDIO", "0_hit.hit04_TLMENU", "1_hit.hit01_AreaVisible_RB02", "1_hit.hit02_LinesVisible_RB02" };
+                    string[] hitTexts = { "Kiosk mode", "Drag and Drop", "Audio replay and adjustment", "Testleiter Menue", "Item area visible", "Lines visible" };
+                    if (score.Count == 0)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("No IRTlibPlayer diagnose result found.");
+                        Console.WriteLine("This part of the system diagnosis seems to have failed.");
+                        Console.ResetColor();
+                        suitable = false;
+                    }
+                    else
+                    {
+                        for(int hitCnt = 0; hitCnt < hitNames.Length; hitCnt++)
+                        {
+                            if (score.TryGetValue(hitNames[hitCnt], out strValue))
+                            {
+                                if (strValue.ToLower().Equals("true"))
+                                {
+                                    Console.ForegroundColor = ConsoleColor.Green;
+                                    Console.WriteLine(hitTexts[hitCnt] + ": OK");
+                                }
+                                else
+                                {
+                                    Console.ForegroundColor = ConsoleColor.Red;
+                                    Console.WriteLine(hitTexts[hitCnt] + ": failed");
+                                    suitable = false;
+                                }
+                            }
+                            else 
+                            {
+                                Console.ForegroundColor = ConsoleColor.Red;
+                                Console.WriteLine(hitTexts[hitCnt] + ": missing");
+                                suitable = false;
+                            }
+                        }
+                        Console.ResetColor();
+                        /*
+                        if (score.TryGetValue("0_hitsCount", out strValue))
+                        {
+                            if (Int32.TryParse(strValue, out intValue))
+                            {
+                                if (intValue == 4) Console.WriteLine();
+                            }
+                            else
+                            {
+                                Console.WriteLine("String could not be parsed.");
+                            }
+                        }
+                        */
+                    }
+                    //remove the temp folder
+                    if (Directory.Exists(tempPath))
+                    {
+                        try
+                        {
+                            Directory.Delete(tempPath, true);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("The process failed: {0}", e.ToString());
+                        }
+                    }
+                    //IRTlibPlayer results -
+
+                    //Overall result +
+
+                    Console.WriteLine(" ");
+                    Console.WriteLine("********************************************************************************");
+                    Console.WriteLine("* Result summary");
+                    Console.WriteLine("********************************************************************************");
+                    Console.WriteLine(" ");
+                    Console.ResetColor();
+
+                    if (suitable)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine("The computer is suitable to run the ECON2022 test system.");
+                    }
+                    else
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("One or more checks of the system diagnose have failed.");
+                        Console.WriteLine("Please check the output for details.");
+                        Console.WriteLine("");
+                        Console.WriteLine("The computer is not suitable to run the ECON2022 test system.");
+                    }
+                    Console.WriteLine(" ");
+                    //Overall result -
+
                 }
 
                 //write the results to a yaml file
@@ -1763,7 +1874,7 @@ namespace ReadinessTool
                 resultFileNameJson = resultFileNameJson + currentTime + ".json";
                 resultFilePathJson = System.IO.Path.Combine(strOutputPath, resultFileNameJson);
 
-                string jsonString = JsonSerializer.Serialize(checkResults);
+                string jsonString = System.Text.Json.JsonSerializer.Serialize(checkResults);
                 File.WriteAllText(resultFilePathJson, jsonString);
                 if (!Silent) { Console.WriteLine("Result file written to file " + resultFilePathJson); }
 
