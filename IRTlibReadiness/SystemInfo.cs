@@ -115,6 +115,8 @@ namespace ReadinessTool
         #region PLAYER
         public bool PlayerAvailable { get; set; }
         public bool PlayerStarted { get; set; }
+        public List<string> PlayerResults { get; set; }
+
         #endregion
 
         #region Touch helper
@@ -253,6 +255,7 @@ namespace ReadinessTool
             #region PLAYER
             PlayerAvailable = false;
             PlayerStarted = false;
+            PlayerResults = new List<string>();
             #endregion
 
             string HKLM_GetString(string path, string key)
@@ -343,6 +346,18 @@ namespace ReadinessTool
             }
 
             _ret += String.Format("- Player (Found Application: {0}, Started: {1})\n", this.PlayerAvailable, this.PlayerStarted);
+            _ret += "\n";
+
+            if(this.PlayerAvailable && this.PlayerStarted)
+            {
+                _ret += "- Player run results:\n";
+                foreach (var s in this.PlayerResults)
+                    _ret += String.Format("-- {0}\n", s);
+            }
+            else
+            {
+                _ret += "- Player run results missing\n";
+            }
             _ret += "\n";
             _ret += "EOF.";
 

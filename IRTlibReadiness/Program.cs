@@ -1517,6 +1517,7 @@ namespace ReadinessTool
                 //initialize the time when the player is started to a time long ago
                 //this is used to find the player's output file later
                 DateTime playerStartTime = new DateTime(2000 ,1,1);
+                DateTime playerInitStartTime = playerStartTime;
 
                 if (info.DoApplicationStartAfterCheck)
                 {
@@ -1594,8 +1595,8 @@ namespace ReadinessTool
                 string playerOutputZipFile = "";
                 string playerOutputScoreFile = "";
 
-                //if (info.PlayerStarted)
-                if (true)
+                if (info.PlayerStarted && (playerInitStartTime != playerStartTime))
+                //if (true)
                 {
                     if (Directory.Exists(strPlayerResultPath)) 
                     {
@@ -1626,8 +1627,17 @@ namespace ReadinessTool
                                 Console.WriteLine("The process failed: {0}", e.ToString());
                             }
                         }
-
-                        ZipFile.ExtractToDirectory(playerOutputZipFile, tempPath, true);
+                        if (dirInfo.Exists) 
+                        {
+                            try
+                            {
+                                ZipFile.ExtractToDirectory(playerOutputZipFile, tempPath, true);
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("The process failed: {0}", e.ToString());
+                            }
+                        }
                         playerOutputScoreFile = System.IO.Path.Combine(tempPath, "ItemScore.json");
                         if (!File.Exists(playerOutputScoreFile)) playerOutputScoreFile = "";
                     }
@@ -1668,11 +1678,6 @@ namespace ReadinessTool
                                             {
                                                 string key = string.Format("{0}_{1}", lineCnt, scoreDetails[0].Trim());
                                                 score.Add(key, scoreDetails[1].Trim());
-                                                /*
-                                                if (scoreDetails[0].Contains("hit"))
-                                                    if(!score.ContainsKey(scoreDetails[0].Trim()))
-                                                        score.Add(scoreDetails[0].Trim(), scoreDetails[1].Trim());
-                                                */
                                             }
                                         }
                                     }
@@ -1690,35 +1695,19 @@ namespace ReadinessTool
                         }
                     }
                 }
+                else
+                {
+                    if (!Silent)
+                    {
+                        Console.WriteLine(string.Format("Player did not start (Starttime: {0} )", playerStartTime));
+                    }
+                }
                 #endregion
-
-                #region WRITE INFO
 
                 //the current time will be used for all output files
                 string currentTime = DateTime.Now.ToString("yyyy-dd-M--HH-mm-ss");
 
-                resultFileNameText = resultFileNameText + currentTime + ".txt";
-                string _filePath = System.IO.Path.Combine(strOutputPath, resultFileNameText);
-
-                try
-                {
-                    File.WriteAllText(_filePath, info.ToString());
-                    if (!Silent) { Console.WriteLine("Report written to file " + _filePath); }
-                }
-                catch { }
-
-                if ((info.DoApplicationStartAfterCheck && !info.PlayerStarted) || (!info.DoApplicationStartAfterCheck))
-                {
-                    try
-                    {
-                        Process.Start("notepad.exe", _filePath);
-                    }
-                    catch { }
-                }
-
-                #endregion
-
-                #region WRITERESULTS
+                #region WRITERESULTS_CONSOLE
 
                 //write the results to the console
 
@@ -1734,7 +1723,7 @@ namespace ReadinessTool
 
                     Console.WriteLine(" ");
                     Console.WriteLine("********************************************************************************");
-                    Console.WriteLine("* The ReadinessTool overall check result is {0} See details below \n", checkResults.OverallResult);
+                    Console.WriteLine("* ReadinessTool results. The overall check result is {0}", checkResults.OverallResult);
                     Console.WriteLine("********************************************************************************");
                     Console.WriteLine(" ");
                     Console.ResetColor();
@@ -1756,7 +1745,7 @@ namespace ReadinessTool
 
                     Console.WriteLine(" ");
                     Console.WriteLine("********************************************************************************");
-                    Console.WriteLine("* IRTlibPlayer system diagnose");
+                    Console.WriteLine("* IRTlibPlayer system diagnose results");
                     Console.WriteLine("********************************************************************************");
                     Console.WriteLine(" ");
                     Console.ResetColor();
@@ -1781,11 +1770,13 @@ namespace ReadinessTool
                                 {
                                     Console.ForegroundColor = ConsoleColor.Green;
                                     Console.WriteLine(hitTexts[hitCnt] + ": OK");
+                                    info.PlayerResults.Add(hitTexts[hitCnt] + ": OK");
                                 }
                                 else
                                 {
                                     Console.ForegroundColor = ConsoleColor.Red;
-                                    Console.WriteLine(hitTexts[hitCnt] + ": failed");
+                                    Console.WriteLine(hitTexts[hitCnt] + ": not OK");
+                                    info.PlayerResults.Add(hitTexts[hitCnt] + ": not OK");
                                     suitable = false;
                                 }
                             }
@@ -1837,7 +1828,7 @@ namespace ReadinessTool
                     if (suitable)
                     {
                         Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine("The computer is suitable to run the ECON2022 test system.");
+                        Console.WriteLine("This computer is suitable to run the ECON2022 test system.");
                     }
                     else
                     {
@@ -1845,11 +1836,41 @@ namespace ReadinessTool
                         Console.WriteLine("One or more checks of the system diagnose have failed.");
                         Console.WriteLine("Please check the output for details.");
                         Console.WriteLine("");
-                        Console.WriteLine("The computer is not suitable to run the ECON2022 test system.");
+                        Console.WriteLine("This computer is not suitable to run the ECON2022 test system.");
                     }
                     Console.WriteLine(" ");
+                    Console.ResetColor();
                     //Overall result -
 
+                }
+                #endregion
+
+                #region WRITERESULTS_FILES
+
+                //text report
+                resultFileNameText = resultFileNameText + currentTime + ".txt";
+                string _filePath = System.IO.Path.Combine(strOutputPath, resultFileNameText);
+
+                try
+                {
+                    File.WriteAllText(_filePath, info.ToString());
+                    if (!Silent) { Console.WriteLine("Report written to file " + _filePath + "\n"); }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("The process failed: {0}", e.ToString());
+                }
+
+                if ((info.DoApplicationStartAfterCheck && !info.PlayerStarted) || (!info.DoApplicationStartAfterCheck))
+                {
+                    try
+                    {
+                        Process.Start("notepad.exe", _filePath);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("The process failed: {0}", e.ToString());
+                    }
                 }
 
                 //write the results to a yaml file
@@ -1867,16 +1888,15 @@ namespace ReadinessTool
                 {
                     streamWriter.Write(writer.ToString());
                 }
-                if (!Silent) { Console.WriteLine("Result file written to file " + resultFilePathYaml); }
+                if (!Silent) { Console.WriteLine("ReadinessTool results written to file " + resultFilePathYaml + "\n"); }
 
                 //write the results to a json file
-
                 resultFileNameJson = resultFileNameJson + currentTime + ".json";
                 resultFilePathJson = System.IO.Path.Combine(strOutputPath, resultFileNameJson);
 
                 string jsonString = System.Text.Json.JsonSerializer.Serialize(checkResults);
                 File.WriteAllText(resultFilePathJson, jsonString);
-                if (!Silent) { Console.WriteLine("Result file written to file " + resultFilePathJson); }
+                if (!Silent) { Console.WriteLine("ReadinessTool results written to file " + resultFilePathJson + "\n"); }
 
                 #endregion
 
