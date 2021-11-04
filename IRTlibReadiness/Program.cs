@@ -1591,7 +1591,8 @@ namespace ReadinessTool
 
                 #region GETRESULTFROMPLAYER
 
-                Dictionary<string, string> score = new Dictionary<string, string>();
+                Dictionary<string, string> hitScore = new Dictionary<string, string>();
+                Dictionary<string, string> missScore = new Dictionary<string, string>();
                 string playerOutputZipFile = "";
                 string playerOutputScoreFile = "";
 
@@ -1676,8 +1677,21 @@ namespace ReadinessTool
                                             string[] scoreDetails = scoreInfo[cnt].Split(':');
                                             if (scoreDetails.Length == 2)
                                             {
-                                                string key = string.Format("{0}_{1}", lineCnt, scoreDetails[0].Trim());
-                                                score.Add(key, scoreDetails[1].Trim());
+                                                string key = scoreDetails[0].Trim();
+                                                string val = scoreDetails[1].Trim();
+
+                                                if (key.ToLower().StartsWith("hit."))
+                                                {
+                                                    //key = string.Format("{0}_{1}", lineCnt, key);
+                                                    if (val.ToLower().Equals("true"))
+                                                        hitScore.Add(key, val);
+                                                }
+                                                if (key.ToLower().StartsWith("miss."))
+                                                {
+                                                    //key = string.Format("{0}_{1}", lineCnt, key);
+                                                    if (val.ToLower().Equals("true"))
+                                                        missScore.Add(key, val);
+                                                }
                                             }
                                         }
                                     }
@@ -1750,9 +1764,11 @@ namespace ReadinessTool
                     Console.WriteLine(" ");
                     Console.ResetColor();
 
-                    string[] hitNames = { "0_hit.hit01_KIOSK", "0_hit.hit02_TOUCH", "0_hit.hit03_AUDIO", "0_hit.hit04_TLMENU", "1_hit.hit01_AreaVisible_RB02", "1_hit.hit02_LinesVisible_RB02" };
-                    string[] hitTexts = { "Kiosk mode", "Drag and Drop", "Audio replay and adjustment", "Testleiter Menue", "Item area visible", "Lines visible" };
-                    if (score.Count == 0)
+                    string[] hitNames =  { "hit.hit01_KIOSK", "hit.hit01_TOUCH", "hit.hit02_TOUCH", "hit.hit01_AUDIO", "hit.hit01_TLMENU", "hit.hit02_TLMENU", "hit.hit03_TLMENU", "hit.hit01_AreaVisible_RB02", "hit.hit02_LinesVisible_RB02" };
+                    string[] hitTexts =  { "Kiosk mode and Alt-Tab", "Drag and Drop by mouse", "Drag and Drop by touch", "Audio: playback and volume adjustment", "Testleiter Menue: Open", "Testleiter Menue: Volume adjustment", "Testleiter Menue: Next button", "Screen: Item area completely visible", "Screen: Lines completely visible" };
+                    string[] missNames = { "miss.miss01_KIOSK", "miss.miss02_KIOSK", "miss.miss01_TOUCH", "miss.miss01_AUDIO", "miss.miss02_AUDIO", "miss.miss01_TLMENU", "miss.miss02_TLMENU", "miss.miss03_TLMENU", "miss.miss01_AreaVisible_RB01", "miss.miss02_LinesVisible_RB01" };
+                    string[] missTexts = { "Kiosk mode and ALt-Tab: Taskbar or window appeared", "Kiosk mode and Alt Tab: leaving test possible", "Drag and Drop", "Audio: playback but no adjustment", "Audio: no playback at all", "Testleiter Menue: Open", "Testleiter Menue: Volume adjustment", "Testleiter Menue: Next button", "Screen: Item area completely visible", "Screen: Lines completely visible" };
+                    if (hitScore.Count == 0 && missScore.Count == 0)
                     {
                         Console.ForegroundColor = ConsoleColor.Red;
                         Console.WriteLine("No IRTlibPlayer diagnose result found.");
@@ -1762,45 +1778,63 @@ namespace ReadinessTool
                     }
                     else
                     {
-                        for(int hitCnt = 0; hitCnt < hitNames.Length; hitCnt++)
+                        //Console.WriteLine("Hits");
+                        for (int hitCnt = 0; hitCnt < hitNames.Length; hitCnt++)
                         {
-                            if (score.TryGetValue(hitNames[hitCnt], out strValue))
+                            if (hitScore.TryGetValue(hitNames[hitCnt], out strValue))
                             {
-                                if (strValue.ToLower().Equals("true"))
-                                {
                                     Console.ForegroundColor = ConsoleColor.Green;
-                                    Console.WriteLine(hitTexts[hitCnt] + ": OK");
+                                    if(!Silent) Console.WriteLine(hitTexts[hitCnt] + ": OK");
                                     info.PlayerResults.Add(hitTexts[hitCnt] + ": OK");
-                                }
-                                else
-                                {
-                                    Console.ForegroundColor = ConsoleColor.Red;
-                                    Console.WriteLine(hitTexts[hitCnt] + ": not OK");
-                                    info.PlayerResults.Add(hitTexts[hitCnt] + ": not OK");
-                                    suitable = false;
-                                }
-                            }
-                            else 
-                            {
-                                Console.ForegroundColor = ConsoleColor.Red;
-                                Console.WriteLine(hitTexts[hitCnt] + ": missing");
-                                suitable = false;
                             }
                         }
                         Console.ResetColor();
-                        /*
-                        if (score.TryGetValue("0_hitsCount", out strValue))
+                        //Console.WriteLine("Misses");
+                        for (int missCnt = 0; missCnt < missNames.Length; missCnt++)
                         {
-                            if (Int32.TryParse(strValue, out intValue))
+                            if (missScore.TryGetValue(missNames[missCnt], out strValue))
                             {
-                                if (intValue == 4) Console.WriteLine();
-                            }
-                            else
-                            {
-                                Console.WriteLine("String could not be parsed.");
+                                    Console.ForegroundColor = ConsoleColor.Red;
+                                    if(!Silent) Console.WriteLine(missTexts[missCnt] + ": not OK");
+                                    info.PlayerResults.Add(missTexts[missCnt] + ": not OK");
+                                    suitable = false;
                             }
                         }
-                        */
+                        Console.ResetColor();
+
+                        //check for missing answers
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        //Kiosk
+                        if (!hitScore.TryGetValue("hit.hit01_KIOSK", out strValue))
+                            if(!missScore.TryGetValue("miss.miss01_KIOSK", out strValue))
+                                if(!missScore.TryGetValue("miss.miss02_KIOSK", out strValue))
+                                    if (!Silent) Console.WriteLine("Question \"Kiosk Modus / ALt-Tab\" is not answered.");
+
+                        if (!hitScore.TryGetValue("hit.hit01_TOUCH", out strValue) && !hitScore.TryGetValue("hit.hit02_TOUCH", out strValue))
+                            if (!missScore.TryGetValue("miss.miss01_TOUCH", out strValue))
+                                if (!Silent) Console.WriteLine("Question \"Kiosk Modus / Drag and Drop\" is not answered.");
+
+                        //Audio
+                        if (!hitScore.TryGetValue("hit.hit01_AUDIO", out strValue))
+                            if (!missScore.TryGetValue("miss.miss01_AUDIO", out strValue))
+                                if (!missScore.TryGetValue("miss.miss02_AUDIO", out strValue))
+                                    if (!Silent) Console.WriteLine("Question \"Audio\" is not answered.");
+
+                        Console.ResetColor();
+
+                        //TL Menu (these answers are skipped if the page was left by using the TL Menu
+                        if (!Silent) Console.WriteLine("\nThe questions concerning the TL Menue are skipped if the Next button of the TL menu was clicked.\n");
+                        if (!hitScore.TryGetValue("hit.hit01_TLMENU", out strValue))
+                            if (!missScore.TryGetValue("miss.miss01_TLMENU", out strValue))
+                                if (!Silent) Console.WriteLine("Question \"TL Menue / Open\" is not answered.");
+                        if (!hitScore.TryGetValue("hit.hit02_TLMENU", out strValue))
+                            if (!missScore.TryGetValue("miss.miss02_TLMENU", out strValue))
+                                if (!Silent) Console.WriteLine("Question \"TL Menue / Audio adjustment\" is not answered.");
+                        if (!hitScore.TryGetValue("hit.hit03_TLMENU", out strValue))
+                            if (!missScore.TryGetValue("miss.miss03_TLMENU", out strValue))
+                                if (!Silent) Console.WriteLine("Question \"TL Menue / Next button\" is not answered.");
+
+                        //the Screen questions don't need to be checked (not possible to end the test without giving answers)
                     }
                     //remove the temp folder
                     if (Directory.Exists(tempPath))
