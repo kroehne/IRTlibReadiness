@@ -119,6 +119,8 @@ namespace ReadinessTool
 
         #endregion
 
+        public string OverallResult { get; set; }
+
         #region Touch helper
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern int GetSystemMetrics(int nIndex);
@@ -258,6 +260,8 @@ namespace ReadinessTool
             PlayerResults = new List<string>();
             #endregion
 
+            OverallResult = "Overallresult missing";
+
             string HKLM_GetString(string path, string key)
             {
                 try
@@ -359,6 +363,11 @@ namespace ReadinessTool
                 _ret += "- Player run results missing\n";
             }
             _ret += "\n";
+
+            _ret += this.OverallResult;
+
+            _ret += "\n";
+
             _ret += "EOF.";
 
             return _ret;

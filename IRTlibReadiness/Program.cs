@@ -1830,7 +1830,7 @@ namespace ReadinessTool
                         Console.ResetColor();
 
                         //TL Menu (these answers are skipped if the page was left by using the TL Menu
-                        if (!Silent) Console.WriteLine("\nThe questions concerning the TL Menue are skipped if the Next button of the TL menu was clicked.\n");
+                        if (!Silent) Console.WriteLine("\nHint: The questions concerning the TL Menue are skipped if the Next button of the TL menu was clicked.\n");
                         if (!hitScore.ContainsKey("hit.hit01_TLMENU"))
                             if (!missScore.ContainsKey("miss.miss01_TLMENU"))
                             {
@@ -1879,7 +1879,7 @@ namespace ReadinessTool
                     {
                         Console.ForegroundColor = ConsoleColor.Green;
                         if(!Silent) Console.WriteLine("This computer is suitable to run the ECON2022 test system.");
-                        info.PlayerResults.Add("This computer is suitable to run the ECON2022 test system.");
+                        info.OverallResult = "This computer is suitable to run the ECON2022 test system.";
                     }
                     else
                     {
@@ -1892,7 +1892,7 @@ namespace ReadinessTool
                             Console.WriteLine("This computer is not suitable to run the ECON2022 test system.");
                             Console.WriteLine(" ");
                         }
-                        info.PlayerResults.Add("This computer is not suitable to run the ECON2022 test system.");
+                        info.OverallResult =  "This computer is not suitable to run the ECON2022 test system.";
                     }
                     Console.ResetColor();
                     //Overall result -
