@@ -1682,15 +1682,13 @@ namespace ReadinessTool
 
                                                 if (key.ToLower().StartsWith("hit."))
                                                 {
-                                                    //key = string.Format("{0}_{1}", lineCnt, key);
                                                     if (val.ToLower().Equals("true"))
-                                                        hitScore.Add(key, val);
+                                                        if(!hitScore.ContainsKey(key)) hitScore.Add(key, val);
                                                 }
                                                 if (key.ToLower().StartsWith("miss."))
                                                 {
-                                                    //key = string.Format("{0}_{1}", lineCnt, key);
                                                     if (val.ToLower().Equals("true"))
-                                                        missScore.Add(key, val);
+                                                        if(!missScore.ContainsKey(key)) missScore.Add(key, val);
                                                 }
                                             }
                                         }
@@ -1781,7 +1779,7 @@ namespace ReadinessTool
                         //Console.WriteLine("Hits");
                         for (int hitCnt = 0; hitCnt < hitNames.Length; hitCnt++)
                         {
-                            if (hitScore.TryGetValue(hitNames[hitCnt], out strValue))
+                            if (hitScore.ContainsKey(hitNames[hitCnt]))
                             {
                                     Console.ForegroundColor = ConsoleColor.Green;
                                     if(!Silent) Console.WriteLine(hitTexts[hitCnt] + ": OK");
@@ -1792,7 +1790,7 @@ namespace ReadinessTool
                         //Console.WriteLine("Misses");
                         for (int missCnt = 0; missCnt < missNames.Length; missCnt++)
                         {
-                            if (missScore.TryGetValue(missNames[missCnt], out strValue))
+                            if (missScore.ContainsKey(missNames[missCnt]))
                             {
                                     Console.ForegroundColor = ConsoleColor.Red;
                                     if(!Silent) Console.WriteLine(missTexts[missCnt] + ": not OK");
@@ -1805,34 +1803,52 @@ namespace ReadinessTool
                         //check for missing answers
                         Console.ForegroundColor = ConsoleColor.Red;
                         //Kiosk
-                        if (!hitScore.TryGetValue("hit.hit01_KIOSK", out strValue))
-                            if(!missScore.TryGetValue("miss.miss01_KIOSK", out strValue))
-                                if(!missScore.TryGetValue("miss.miss02_KIOSK", out strValue))
+                        if (!hitScore.ContainsKey("hit.hit01_KIOSK"))
+                            if(!missScore.ContainsKey("miss.miss01_KIOSK"))
+                                if (!missScore.ContainsKey("miss.miss02_KIOSK"))
+                                {
                                     if (!Silent) Console.WriteLine("Question \"Kiosk Modus / ALt-Tab\" is not answered.");
+                                    info.PlayerResults.Add("Question \"Kiosk Modus / ALt-Tab\" is not answered.");
+                                }
 
-                        if (!hitScore.TryGetValue("hit.hit01_TOUCH", out strValue) && !hitScore.TryGetValue("hit.hit02_TOUCH", out strValue))
-                            if (!missScore.TryGetValue("miss.miss01_TOUCH", out strValue))
+                        if (!hitScore.ContainsKey("hit.hit01_TOUCH") && !hitScore.ContainsKey("hit.hit02_TOUCH"))
+                            if (!missScore.ContainsKey("miss.miss01_TOUCH"))
+                            {
                                 if (!Silent) Console.WriteLine("Question \"Kiosk Modus / Drag and Drop\" is not answered.");
+                                info.PlayerResults.Add("Question \"Kiosk Modus / Drag and Drop\" is not answered.");
+                            }
 
                         //Audio
-                        if (!hitScore.TryGetValue("hit.hit01_AUDIO", out strValue))
-                            if (!missScore.TryGetValue("miss.miss01_AUDIO", out strValue))
-                                if (!missScore.TryGetValue("miss.miss02_AUDIO", out strValue))
+                        if (!hitScore.ContainsKey("hit.hit01_AUDIO"))
+                            if (!missScore.ContainsKey("miss.miss01_AUDIO"))
+                                if (!missScore.ContainsKey("miss.miss02_AUDIO"))
+                                {
                                     if (!Silent) Console.WriteLine("Question \"Audio\" is not answered.");
+                                    info.PlayerResults.Add("Question \"Audio\" is not answered.");
+                                }
 
                         Console.ResetColor();
 
                         //TL Menu (these answers are skipped if the page was left by using the TL Menu
                         if (!Silent) Console.WriteLine("\nThe questions concerning the TL Menue are skipped if the Next button of the TL menu was clicked.\n");
-                        if (!hitScore.TryGetValue("hit.hit01_TLMENU", out strValue))
-                            if (!missScore.TryGetValue("miss.miss01_TLMENU", out strValue))
+                        if (!hitScore.ContainsKey("hit.hit01_TLMENU"))
+                            if (!missScore.ContainsKey("miss.miss01_TLMENU"))
+                            {
                                 if (!Silent) Console.WriteLine("Question \"TL Menue / Open\" is not answered.");
-                        if (!hitScore.TryGetValue("hit.hit02_TLMENU", out strValue))
-                            if (!missScore.TryGetValue("miss.miss02_TLMENU", out strValue))
+                                info.PlayerResults.Add("Question \"TL Menue / Open\" is not answered.");
+                            }
+                        if (!hitScore.ContainsKey("hit.hit02_TLMENU"))
+                            if (!missScore.ContainsKey("miss.miss02_TLMENU"))
+                            {
                                 if (!Silent) Console.WriteLine("Question \"TL Menue / Audio adjustment\" is not answered.");
-                        if (!hitScore.TryGetValue("hit.hit03_TLMENU", out strValue))
-                            if (!missScore.TryGetValue("miss.miss03_TLMENU", out strValue))
+                                info.PlayerResults.Add("Question \"TL Menue / Audio adjustment\" is not answered.");
+                            }
+                        if (!hitScore.ContainsKey("hit.hit03_TLMENU"))
+                            if (!missScore.ContainsKey("miss.miss03_TLMENU"))
+                            {
                                 if (!Silent) Console.WriteLine("Question \"TL Menue / Next button\" is not answered.");
+                                info.PlayerResults.Add("Question \"TL Menue / Next button\" is not answered.");
+                            }
 
                         //the Screen questions don't need to be checked (not possible to end the test without giving answers)
                     }
