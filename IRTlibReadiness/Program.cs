@@ -1878,17 +1878,22 @@ namespace ReadinessTool
                     if (suitable)
                     {
                         Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine("This computer is suitable to run the ECON2022 test system.");
+                        if(!Silent) Console.WriteLine("This computer is suitable to run the ECON2022 test system.");
+                        info.PlayerResults.Add("This computer is suitable to run the ECON2022 test system.");
                     }
                     else
                     {
                         Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine("One or more checks of the system diagnose have failed.");
-                        Console.WriteLine("Please check the output for details.");
-                        Console.WriteLine("");
-                        Console.WriteLine("This computer is not suitable to run the ECON2022 test system.");
+                        if (!Silent)
+                        {
+                            Console.WriteLine("One or more checks of the system diagnose have failed.");
+                            Console.WriteLine("Please check the output for details.");
+                            Console.WriteLine("");
+                            Console.WriteLine("This computer is not suitable to run the ECON2022 test system.");
+                            Console.WriteLine(" ");
+                        }
+                        info.PlayerResults.Add("This computer is not suitable to run the ECON2022 test system.");
                     }
-                    Console.WriteLine(" ");
                     Console.ResetColor();
                     //Overall result -
 
