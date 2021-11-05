@@ -1740,20 +1740,31 @@ namespace ReadinessTool
                     Console.WriteLine(" ");
                     Console.ResetColor();
 
+                    CheckValue currentValue;
+                    string optionalCheck = "";
+
                     foreach (KeyValuePair<string, CheckResult> entry in checkResults.CheckResultMap)
                     {
+                        optionalCheck = "";
                         if (entry.Value.Result == ResultType.succeeded) Console.ForegroundColor = ConsoleColor.Green;
-                        if (entry.Value.Result == ResultType.failed) { Console.ForegroundColor = ConsoleColor.Red; suitable = false; }
+                        if (entry.Value.Result == ResultType.failed) { 
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            if(configurationMap.CheckRanges.TryGetValue(entry.Key, out currentValue))
+                            {   //do not set the overall result to false if this is a optional check
+                                if (!currentValue.OptionalCheck) 
+                                    suitable = false;
+                                else
+                                    optionalCheck = " (optional check)";
+                            }
+                        }
                         if (entry.Value.Result == ResultType.skipped) Console.ForegroundColor = ConsoleColor.Gray;
 
-                        Console.WriteLine("{0} - {1} Info: {2}", entry.Value.Result, entry.Key, entry.Value.ResultInfo);
+                        Console.WriteLine("{0} - {1} Info: {2} {3}", entry.Value.Result, entry.Key, entry.Value.ResultInfo, optionalCheck);
                     }
                     Console.ResetColor();
                     //ReadinessTool results -
 
                     //IRTlibPlayer results +
-                    string strValue = "";
-                    int intValue = 0;
 
                     Console.WriteLine(" ");
                     Console.WriteLine("********************************************************************************");
@@ -1901,6 +1912,7 @@ namespace ReadinessTool
                 #endregion
 
                 #region WRITERESULTS_FILES
+                Console.ResetColor();
 
                 //text report
                 resultFileNameText = resultFileNameText + currentTime + ".txt";
