@@ -65,6 +65,8 @@ namespace ReadinessTool
             //the output path of the results may be affected by the parameter later
             string resultFilePathYaml = "";
             string resultFilePathJson = "";
+            string studyName = "";
+            List<string> libPlayerCheckList = new List<string>();
 
             ConfigurationMap configurationMap = new ConfigurationMap();
             CheckResults checkResults = new CheckResults();
@@ -186,6 +188,15 @@ namespace ReadinessTool
                 checkScopeDiagnose = parameterValue.Value.ToLower().Equals("diagnose");
                 //otherwise "normal"
             }
+            if (configurationMap.Parameters.TryGetValue("StudyName", out parameterValue))
+            {
+                studyName = parameterValue.Value;
+            }
+
+            if (configurationMap.Parameters.TryGetValue("LibPlayerChecks", out parameterValue))
+            {
+                libPlayerCheckList = new List<string>(parameterValue.Value.Split(','));
+            }
 
             #endregion
 
@@ -238,7 +249,17 @@ namespace ReadinessTool
                     if (Configuration["ReadinessCheckScope"] != null)
                     {
                         checkScopeDiagnose = Configuration["ReadinessCheckScope"].ToString().ToLower() == "diagnose";
-                        //otherwise "normal"
+                    }
+
+                    if (Configuration["StudyName"] != null)
+                    {
+                        studyName = Configuration["StudyName"].ToString();
+                    }
+
+                    if (Configuration["LibPlayerChecks"] != null)
+                    {
+                        string libPlayerChecks = Configuration["LibPlayerChecks"].ToString();
+                        libPlayerCheckList = new List<string>(libPlayerChecks.Split(','));
                     }
 
                 }
@@ -1746,15 +1767,22 @@ namespace ReadinessTool
                     foreach (KeyValuePair<string, CheckResult> entry in checkResults.CheckResultMap)
                     {
                         optionalCheck = "";
-                        if (entry.Value.Result == ResultType.succeeded) Console.ForegroundColor = ConsoleColor.Green;
+                        if (entry.Value.Result == ResultType.succeeded) 
+                            Console.ForegroundColor = ConsoleColor.Green;
                         if (entry.Value.Result == ResultType.failed) { 
-                            Console.ForegroundColor = ConsoleColor.Red;
+                            //Console.ForegroundColor = ConsoleColor.Red;
                             if(configurationMap.CheckRanges.TryGetValue(entry.Key, out currentValue))
                             {   //do not set the overall result to false if this is a optional check
-                                if (!currentValue.OptionalCheck) 
+                                if (!currentValue.OptionalCheck)
+                                {
+                                    Console.ForegroundColor = ConsoleColor.Red;
                                     suitable = false;
+                                }
                                 else
+                                {
+                                    Console.ForegroundColor = ConsoleColor.DarkYellow;
                                     optionalCheck = " (optional check)";
+                                }
                             }
                         }
                         if (entry.Value.Result == ResultType.skipped) Console.ForegroundColor = ConsoleColor.Gray;
@@ -1773,10 +1801,11 @@ namespace ReadinessTool
                     Console.WriteLine(" ");
                     Console.ResetColor();
 
-                    string[] hitNames =  { "hit.hit01_KIOSK", "hit.hit01_TOUCH", "hit.hit02_TOUCH", "hit.hit01_AUDIO", "hit.hit01_TLMENU", "hit.hit02_TLMENU", "hit.hit03_TLMENU", "hit.hit01_AreaVisible_RB02", "hit.hit02_LinesVisible_RB02" };
-                    string[] hitTexts =  { "Kiosk mode and Alt-Tab", "Drag and Drop by mouse", "Drag and Drop by touch", "Audio: playback and volume adjustment", "Testleiter Menue: Open", "Testleiter Menue: Volume adjustment", "Testleiter Menue: Next button", "Screen: Item area completely visible", "Screen: Lines completely visible" };
+                    string[] hitNames = { "hit.hit01_KIOSK", "hit.hit01_TOUCH", "hit.hit02_TOUCH", "hit.hit01_AUDIO", "hit.hit01_TLMENU", "hit.hit02_TLMENU", "hit.hit03_TLMENU", "hit.hit01_AreaVisible_RB02", "hit.hit02_LinesVisible_RB02" };
+                    string[] hitTexts = { "Kiosk mode and Alt-Tab", "Drag and Drop by mouse", "Drag and Drop by touch", "Audio: playback and volume adjustment", "Testleiter Menue: Open", "Testleiter Menue: Volume adjustment", "Testleiter Menue: Next button", "Screen: Item area completely visible", "Screen: Lines completely visible" };
                     string[] missNames = { "miss.miss01_KIOSK", "miss.miss02_KIOSK", "miss.miss01_TOUCH", "miss.miss01_AUDIO", "miss.miss02_AUDIO", "miss.miss01_TLMENU", "miss.miss02_TLMENU", "miss.miss03_TLMENU", "miss.miss01_AreaVisible_RB01", "miss.miss02_LinesVisible_RB01" };
                     string[] missTexts = { "Kiosk mode and ALt-Tab: Taskbar or window appeared", "Kiosk mode and Alt Tab: leaving test possible", "Drag and Drop", "Audio: playback but no adjustment", "Audio: no playback at all", "Testleiter Menue: Open", "Testleiter Menue: Volume adjustment", "Testleiter Menue: Next button", "Screen: Item area completely visible", "Screen: Lines completely visible" };
+
                     if (hitScore.Count == 0 && missScore.Count == 0)
                     {
                         Console.ForegroundColor = ConsoleColor.Red;
@@ -1814,53 +1843,67 @@ namespace ReadinessTool
                         //check for missing answers
                         Console.ForegroundColor = ConsoleColor.Red;
                         //Kiosk
-                        if (!hitScore.ContainsKey("hit.hit01_KIOSK"))
-                            if(!missScore.ContainsKey("miss.miss01_KIOSK"))
-                                if (!missScore.ContainsKey("miss.miss02_KIOSK"))
-                                {
-                                    if (!Silent) Console.WriteLine("Question \"Kiosk Modus / ALt-Tab\" is not answered.");
-                                    info.PlayerResults.Add("Question \"Kiosk Modus / ALt-Tab\" is not answered.");
-                                }
+                        if (libPlayerCheckList.Contains("KIOSK"))
+                        {
+                            if (!hitScore.ContainsKey("hit.hit01_KIOSK"))
+                                if (!missScore.ContainsKey("miss.miss01_KIOSK"))
+                                    if (!missScore.ContainsKey("miss.miss02_KIOSK"))
+                                    {
+                                        if (!Silent) Console.WriteLine("Question \"Kiosk Modus / ALt-Tab\" is not answered.");
+                                        info.PlayerResults.Add("Question \"Kiosk Modus / ALt-Tab\" is not answered.");
+                                        suitable = false;
+                                    }
+                        }
 
-                        if (!hitScore.ContainsKey("hit.hit01_TOUCH") && !hitScore.ContainsKey("hit.hit02_TOUCH"))
-                            if (!missScore.ContainsKey("miss.miss01_TOUCH"))
-                            {
-                                if (!Silent) Console.WriteLine("Question \"Kiosk Modus / Drag and Drop\" is not answered.");
-                                info.PlayerResults.Add("Question \"Kiosk Modus / Drag and Drop\" is not answered.");
-                            }
+                        if (libPlayerCheckList.Contains("TOUCH"))
+                        {
+                            if (!hitScore.ContainsKey("hit.hit01_TOUCH") && !hitScore.ContainsKey("hit.hit02_TOUCH"))
+                                if (!missScore.ContainsKey("miss.miss01_TOUCH"))
+                                {
+                                    if (!Silent) Console.WriteLine("Question \"Kiosk Modus / Drag and Drop\" is not answered.");
+                                    info.PlayerResults.Add("Question \"Kiosk Modus / Drag and Drop\" is not answered.");
+                                    suitable = false;
+                                }
+                        }
 
                         //Audio
-                        if (!hitScore.ContainsKey("hit.hit01_AUDIO"))
-                            if (!missScore.ContainsKey("miss.miss01_AUDIO"))
-                                if (!missScore.ContainsKey("miss.miss02_AUDIO"))
-                                {
-                                    if (!Silent) Console.WriteLine("Question \"Audio\" is not answered.");
-                                    info.PlayerResults.Add("Question \"Audio\" is not answered.");
-                                }
+                        if (libPlayerCheckList.Contains("AUDIO"))
+                        {
 
+                            if (!hitScore.ContainsKey("hit.hit01_AUDIO"))
+                                if (!missScore.ContainsKey("miss.miss01_AUDIO"))
+                                    if (!missScore.ContainsKey("miss.miss02_AUDIO"))
+                                    {
+                                        if (!Silent) Console.WriteLine("Question \"Audio\" is not answered.");
+                                        info.PlayerResults.Add("Question \"Audio\" is not answered.");
+                                        suitable = false;
+                                    }
+                        }
                         Console.ResetColor();
 
-                        //TL Menu (these answers are skipped if the page was left by using the TL Menu
-                        if (!Silent) Console.WriteLine("\nHint: The questions concerning the TL Menue are skipped if the Next button of the TL menu was clicked.\n");
-                        if (!hitScore.ContainsKey("hit.hit01_TLMENU"))
-                            if (!missScore.ContainsKey("miss.miss01_TLMENU"))
-                            {
-                                if (!Silent) Console.WriteLine("Question \"TL Menue / Open\" is not answered.");
-                                info.PlayerResults.Add("Question \"TL Menue / Open\" is not answered.");
-                            }
-                        if (!hitScore.ContainsKey("hit.hit02_TLMENU"))
-                            if (!missScore.ContainsKey("miss.miss02_TLMENU"))
-                            {
-                                if (!Silent) Console.WriteLine("Question \"TL Menue / Audio adjustment\" is not answered.");
-                                info.PlayerResults.Add("Question \"TL Menue / Audio adjustment\" is not answered.");
-                            }
-                        if (!hitScore.ContainsKey("hit.hit03_TLMENU"))
-                            if (!missScore.ContainsKey("miss.miss03_TLMENU"))
-                            {
-                                if (!Silent) Console.WriteLine("Question \"TL Menue / Next button\" is not answered.");
-                                info.PlayerResults.Add("Question \"TL Menue / Next button\" is not answered.");
-                            }
-
+                        if (libPlayerCheckList.Contains("TLMENU"))
+                        {
+                            //TL Menu (these answers are skipped if the page was left by using the TL Menu
+                            if (!Silent) Console.WriteLine("\nHint: The questions concerning the TL Menue are skipped if the Next button of the TL menu was clicked.\n");
+                            if (!hitScore.ContainsKey("hit.hit01_TLMENU"))
+                                if (!missScore.ContainsKey("miss.miss01_TLMENU"))
+                                {
+                                    if (!Silent) Console.WriteLine("Question \"TL Menue / Open\" is not answered.");
+                                    info.PlayerResults.Add("Question \"TL Menue / Open\" is not answered.");
+                                }
+                            if (!hitScore.ContainsKey("hit.hit02_TLMENU"))
+                                if (!missScore.ContainsKey("miss.miss02_TLMENU"))
+                                {
+                                    if (!Silent) Console.WriteLine("Question \"TL Menue / Audio adjustment\" is not answered.");
+                                    info.PlayerResults.Add("Question \"TL Menue / Audio adjustment\" is not answered.");
+                                }
+                            if (!hitScore.ContainsKey("hit.hit03_TLMENU"))
+                                if (!missScore.ContainsKey("miss.miss03_TLMENU"))
+                                {
+                                    if (!Silent) Console.WriteLine("Question \"TL Menue / Next button\" is not answered.");
+                                    info.PlayerResults.Add("Question \"TL Menue / Next button\" is not answered.");
+                                }
+                        }
                         //the Screen questions don't need to be checked (not possible to end the test without giving answers)
                     }
                     //remove the temp folder
@@ -1889,21 +1932,23 @@ namespace ReadinessTool
                     if (suitable)
                     {
                         Console.ForegroundColor = ConsoleColor.Green;
-                        if(!Silent) Console.WriteLine("This computer is suitable to run the ECON2022 test system.");
-                        info.OverallResult = "This computer is suitable to run the ECON2022 test system.";
+                        if(!Silent) Console.WriteLine("This computer is suitable to run the " + studyName + " test system.");
+                        info.OverallResult = "This computer is suitable to run the " + studyName + " test system.";
                     }
                     else
                     {
                         Console.ForegroundColor = ConsoleColor.Red;
                         if (!Silent)
                         {
-                            Console.WriteLine("One or more checks of the system diagnose have failed.");
+                            Console.WriteLine("One or more checks of the system diagnose have failed or");
+                            Console.WriteLine("maybe there are missing answers of the IRTlibPlayer diagnose.");
+                            Console.WriteLine("");
                             Console.WriteLine("Please check the output for details.");
                             Console.WriteLine("");
-                            Console.WriteLine("This computer is not suitable to run the ECON2022 test system.");
+                            Console.WriteLine("This computer is not suitable to run the " + studyName + " test system.");
                             Console.WriteLine(" ");
                         }
-                        info.OverallResult =  "This computer is not suitable to run the ECON2022 test system.";
+                        info.OverallResult = "This computer is not suitable to run the " + studyName + " test system.";
                     }
                     Console.ResetColor();
                     //Overall result -

@@ -62,6 +62,26 @@ namespace ReadinessTool
                 this.Parameters.Add(parameterKey, parameterValue);
             }
 
+            parameterKey = "StudyName";
+            if (!this.Parameters.ContainsKey(parameterKey))
+            {
+                parameterValue = new ParameterValue();
+                parameterValue.PurposeInfo = "Name of the current study used for text output";
+                parameterValue.AllowedValuesInfo = new string[1] { "Character string" };
+                parameterValue.Value = "Study";
+                this.Parameters.Add(parameterKey, parameterValue);
+            }
+
+            parameterKey = "LibPlayerChecks";
+            if (!this.Parameters.ContainsKey(parameterKey))
+            {
+                parameterValue = new ParameterValue();
+                parameterValue.PurposeInfo = "List of checks performed by the IRTlibPlayer separated by \",\"";
+                parameterValue.AllowedValuesInfo = new string[6] { "KIOSK","TOUCH","AUDIO","TLMENU","AreaVisible","LinesVisible" };
+                parameterValue.Value = "KIOSK,TOUCH,AUDIO,TLMENU,AreaVisible,LinesVisible";
+                this.Parameters.Add(parameterKey, parameterValue);
+            }
+
             //Parameters -
             #endregion
 
