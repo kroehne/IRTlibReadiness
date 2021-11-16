@@ -1891,12 +1891,16 @@ namespace ReadinessTool
                                     if (!Silent) Console.WriteLine("Question \"TL Menue / Open\" is not answered.");
                                     info.PlayerResults.Add("Question \"TL Menue / Open\" is not answered.");
                                 }
-                            if (!hitScore.ContainsKey("hit.hit02_TLMENU"))
-                                if (!missScore.ContainsKey("miss.miss02_TLMENU"))
-                                {
-                                    if (!Silent) Console.WriteLine("Question \"TL Menue / Audio adjustment\" is not answered.");
-                                    info.PlayerResults.Add("Question \"TL Menue / Audio adjustment\" is not answered.");
-                                }
+
+                            if (libPlayerCheckList.Contains("AUDIO"))
+                            {
+                                if (!hitScore.ContainsKey("hit.hit02_TLMENU"))
+                                    if (!missScore.ContainsKey("miss.miss02_TLMENU"))
+                                    {
+                                        if (!Silent) Console.WriteLine("Question \"TL Menue / Audio adjustment\" is not answered.");
+                                        info.PlayerResults.Add("Question \"TL Menue / Audio adjustment\" is not answered.");
+                                    }
+                            }
                             if (!hitScore.ContainsKey("hit.hit03_TLMENU"))
                                 if (!missScore.ContainsKey("miss.miss03_TLMENU"))
                                 {
