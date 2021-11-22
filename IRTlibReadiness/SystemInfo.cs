@@ -45,6 +45,7 @@ namespace ReadinessTool
         public bool TouchEnabled { get; set; }
         public bool HasTouch { get; set; }
         public string Version { get; set; }
+        public string DotNetFrameworkVersion { get; set; }
         #endregion
 
         #region USER
@@ -218,6 +219,8 @@ namespace ReadinessTool
             TempFolder = "";
             WriteAccessTempFolder = false;
 
+            DotNetFrameworkVersion = getDotNetFrameworkVersion(false);
+
             #endregion
 
             #region VIRUS
@@ -287,7 +290,6 @@ namespace ReadinessTool
 
 
         }
-
         public override string ToString()
         {
             string _ret = "";
@@ -298,7 +300,7 @@ namespace ReadinessTool
             _ret += String.Format("- Memory: Total RAM = {0:0.00}Gb, Available RAM = {1:0.00}Gb\n", this.TotalRam / 1024 / 1024 / 1024, this.FreeRam / 1024 / 1024 / 1024);
             _ret += String.Format("- Touch Enabled: {0} \n", this.TouchEnabled);
             _ret += String.Format("- Current User: {0} (Roles: Administrator = {1}, User = {2}, Guest = {3})\n", this.UserName, this.IsAdministrator, this.IsUser, this.IsGuest);
-
+            _ret += String.Format("- .Net Framework version: {0} )\n", this.DotNetFrameworkVersion);
             _ret += "\n";
 
             _ret += String.Format("- Virus Applications: {0} Application(s) found\n", this.VirusDetais.Count);
@@ -343,7 +345,7 @@ namespace ReadinessTool
 
             if (this.DoDriveSpeedTest)
             { 
-                _ret += String.Format("- Drive Speed: Read {0:0.00} MB/s, Write {1:0.00} MB/s\n", this.ReadScore, this.WriteScore);
+                _ret += String.Format("- Drive Speed (sequential): Read {0:0.00} MB/s, Write {1:0.00} MB/s\n", this.ReadScore, this.WriteScore);
                 foreach (var s in this.SpeedDetails)
                     _ret += "   " + s + "\n";
                 _ret += "\n";
@@ -373,5 +375,148 @@ namespace ReadinessTool
             return _ret;
         }
 
+        public string getDotNetFrameworkVersion(bool lookForVersionsBeforeVersion45 = false)
+        {
+            string dotNetFrameworkVersion = "unknown";
+
+            const string subkey = @"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full\";
+
+            using (var ndpKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32).OpenSubKey(subkey))
+            {
+                if (ndpKey != null && ndpKey.GetValue("Release") != null)
+                {
+                    dotNetFrameworkVersion = $".NET Framework Version: {CheckFor45PlusVersion((int)ndpKey.GetValue("Release"))}";
+                }
+                else
+                {
+                    if (lookForVersionsBeforeVersion45)
+                    {
+                        dotNetFrameworkVersion = CheckForVersionBefore45();
+                    }
+                    else
+                    {
+                        dotNetFrameworkVersion = ".NET Framework Version 4.5 or later is not detected.";
+                    }
+                }
+            }
+
+            return dotNetFrameworkVersion;
+        }
+
+        // Checking the version using >= enables forward compatibility.
+        private string CheckFor45PlusVersion(int releaseKey)
+        {
+            if (releaseKey >= 528040)
+                return "4.8 or later";
+            if (releaseKey >= 461808)
+                return "4.7.2";
+            if (releaseKey >= 461308)
+                return "4.7.1";
+            if (releaseKey >= 460798)
+                return "4.7";
+            if (releaseKey >= 394802)
+                return "4.6.2";
+            if (releaseKey >= 394254)
+                return "4.6.1";
+            if (releaseKey >= 393295)
+                return "4.6";
+            if (releaseKey >= 379893)
+                return "4.5.2";
+            if (releaseKey >= 378675)
+                return "4.5.1";
+            if (releaseKey >= 378389)
+                return "4.5";
+            // This code should never execute. A non-null release key should mean
+            // that 4.5 or later is installed.
+            return "Version 4.5 or later is not detected.";
+
+        }
+
+        private string CheckForVersionBefore45()
+        {
+            string dotNetFrameworkVersion = ".NET Framework Version is not detected.";
+
+            // Open the registry key for the .NET Framework entry.
+            using (RegistryKey ndpKey =
+                    RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32).
+                    OpenSubKey(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\"))
+            {
+                foreach (var versionKeyName in ndpKey.GetSubKeyNames())
+                {
+                    // Skip .NET Framework 4.5 version information.
+                    if (versionKeyName == "v4")
+                    {
+                        continue;
+                    }
+
+                    if (versionKeyName.StartsWith("v"))
+                    {
+                        RegistryKey versionKey = ndpKey.OpenSubKey(versionKeyName);
+
+                        // Get the .NET Framework version value.
+                        var name = (string)versionKey.GetValue("Version", "");
+                        // Get the service pack (SP) number.
+                        var sp = versionKey.GetValue("SP", "").ToString();
+
+                        // Get the installation flag.
+                        var install = versionKey.GetValue("Install", "").ToString();
+                        if (string.IsNullOrEmpty(install))
+                        {
+                            // No install info; it must be in a child subkey.
+                            return $"{versionKeyName}  {name}";
+                        }
+                        else if (install == "1")
+                        {
+                            // Install = 1 means the version is installed.
+
+                            if (!string.IsNullOrEmpty(sp))
+                            {
+                                return $"{versionKeyName}  {name}  SP{sp}";
+                            }
+                            else
+                            {
+                                return $"{versionKeyName}  {name}";
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            continue;
+                        }
+                        // else print out info from subkeys...
+
+                        // Iterate through the subkeys of the version subkey.
+                        foreach (var subKeyName in versionKey.GetSubKeyNames())
+                        {
+                            RegistryKey subKey = versionKey.OpenSubKey(subKeyName);
+                            name = (string)subKey.GetValue("Version", "");
+                            if (!string.IsNullOrEmpty(name))
+                                sp = subKey.GetValue("SP", "").ToString();
+
+                            install = subKey.GetValue("Install", "").ToString();
+                            if (string.IsNullOrEmpty(install))
+                            {
+                                // No install info; it must be later.
+                                return $"{versionKeyName}  {name}";
+                            }
+                            else if (install == "1")
+                            {
+                                if (!string.IsNullOrEmpty(sp))
+                                {
+                                    return $"{subKeyName}  {name}  SP{sp}";
+                                }
+                                else
+                                {
+                                    return $"  {subKeyName}  {name}";
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return dotNetFrameworkVersion;
+            }
+        }
+
+        }
     }
-}

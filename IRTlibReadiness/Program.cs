@@ -35,7 +35,9 @@ namespace ReadinessTool
         {
             bool Silent = false;
             bool Verbose = false;
-             
+            //WMI calls may throw an exception
+            bool WMIexceptionOccurred = false;
+
             List<string> RegistryKeys = new List<string>() { @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation" };
 
             #region ConfigurationData
@@ -359,6 +361,7 @@ namespace ReadinessTool
                     Console.WriteLine(" - CPU: {0} (Usage: {1} %)", info.CPUType, info.CPUUse);
                     Console.WriteLine(" - Memory: Total RAM = {0:0.00}Gb, Available RAM = {1:0.00}Gb", info.TotalRam / 1024 / 1024 / 1024, info.FreeRam / 1024 / 1024 / 1024);
                     Console.WriteLine(" - Touch Enabled Device: {0}", info.TouchEnabled);
+                    Console.WriteLine(" - .Net Framework version: {0}", info.DotNetFrameworkVersion);
                     Console.ResetColor();
                 }
                 #endregion
@@ -571,6 +574,7 @@ namespace ReadinessTool
                 //anti virus software check check
                 checkInfo = "AntiVirusSoftwareCheck";
                 checkResult = new CheckResult(ResultType.failed, "");
+                WMIexceptionOccurred = false;
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
@@ -590,11 +594,11 @@ namespace ReadinessTool
                                 string pathToSignedReportingExe = "unknown";
 
                                 //some of the properties may not be present
-                                try { var ts = instance.GetPropertyValue("displayName"); displayName = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property displayName not found"); }
-                                try { var ts = instance.GetPropertyValue("productState"); productState = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property productState not found"); }
-                                try { var ts = instance.GetPropertyValue("timestamp"); timestamp = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property timestamp not found"); }
-                                try { var ts = instance.GetPropertyValue("pathToSignedProductExe"); pathToSignedProductExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedProductExe not found"); }
-                                try { var ts = instance.GetPropertyValue("pathToSignedReportingExe"); pathToSignedReportingExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection failed: Property pathToSignedReportingExe not found"); }
+                                try { var ts = instance.GetPropertyValue("displayName"); displayName = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection error: Property displayName not found"); }
+                                try { var ts = instance.GetPropertyValue("productState"); productState = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection error: Property productState not found"); }
+                                try { var ts = instance.GetPropertyValue("timestamp"); timestamp = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection error: Property timestamp not found"); }
+                                try { var ts = instance.GetPropertyValue("pathToSignedProductExe"); pathToSignedProductExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection error: Property pathToSignedProductExe not found"); }
+                                try { var ts = instance.GetPropertyValue("pathToSignedReportingExe"); pathToSignedReportingExe = ts.ToString(); } catch (Exception e) { Console.WriteLine("\nVirus software detection error: Property pathToSignedReportingExe not found"); }
 
                                 info.VirusDetais.Add(String.Format("Name: {0}, State {1}, Timestamp {2}, ProductExe {3}, ReportingExe: {4}",
                                     displayName,
@@ -618,9 +622,12 @@ namespace ReadinessTool
                     }
                     catch (Exception e)
                     {
-                        Console.WriteLine("\nVirus software detection failed with an unexpected error:");
-                        Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                        Console.WriteLine(e.StackTrace);
+                        WMIexceptionOccurred = true;
+                        Console.WriteLine(" - Could not run the Virus software detection. This may not denote that '" + studyName + "' can't be run on this computer.");
+                        //Console.WriteLine("\nPlease check the .net Framework version installed on your system.");
+                        checkResult.ResultInfo = "Could not run the Virus software detection. This may not denote that '" + studyName + "' can't be run on this computer.";
+                        //Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                        //Console.WriteLine(e.StackTrace);
                     }
                 }
 
@@ -631,6 +638,9 @@ namespace ReadinessTool
                 }
                 else
                 {
+                    if (!WMIexceptionOccurred)
+                    {
+
                         ValidValue antiVirusSoftwareExpected = checkValue.ValidValues.Find(item => item.name == "AntiVirusSoftwareExpected");
                         if (antiVirusSoftwareExpected != null)
                         {
@@ -645,6 +655,7 @@ namespace ReadinessTool
 
                             checkResult.ResultInfo += String.Format(" (expected: {0})", antiVirusSoftwareExpected.value);
                         }
+                    }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
                 #endregion
@@ -785,6 +796,7 @@ namespace ReadinessTool
                 //Audio checks
                 checkInfo = "AudioDevicesCheck";
                 checkResult = new CheckResult(ResultType.failed, "");
+                WMIexceptionOccurred = false;
 
                 checkValue = configurationMap.CheckRanges.TryGetValue(checkInfo, out checkValue) ? checkValue : new CheckValue(false, false, "Config data missing");
 
@@ -826,9 +838,12 @@ namespace ReadinessTool
                     }
                     catch (Exception e)
                     {
-                        Console.WriteLine("\nReading audio devices failed with an unexpected error:");
-                        Console.WriteLine("\t" + e.GetType() + " " + e.Message);
-                        Console.WriteLine(e.StackTrace);
+                        WMIexceptionOccurred = true;
+                        Console.WriteLine(" - Could not run the Audio hardware detection. This may not denote that '" + studyName + "' can't be run on this computer.");
+                        //Console.WriteLine("\nPlease check the .net Framework version installed on your system.");
+                        checkResult.ResultInfo = "Could not run the Audio hardware detection. This may not denote that '" + studyName + "' can't be run on this computer.";
+                        //Console.WriteLine("\t" + e.GetType() + " " + e.Message);
+                        //Console.WriteLine(e.StackTrace);
                     }
                 }
                 if (!checkResults.CheckResultMap.ContainsKey(checkInfo)) { if (!checkValue.OptionalCheck) checkResults.OverallResult = checkResult.Result != ResultType.failed && checkResults.OverallResult; checkResults.CheckResultMap.Add(checkInfo, checkResult); }
@@ -1142,7 +1157,7 @@ namespace ReadinessTool
                 if (!Silent)
                 {
                     Console.ForegroundColor = ConsoleColor.White;
-                    Console.WriteLine(" - Tempfolder: {0} (Write Access: {1}, Free Bytes: {2})", info.TempFolder, info.WriteAccessTempFolder, info.TempFolderFreeBytes);
+                    Console.WriteLine(" - Temp folder: {0} (Write Access: {1}, Free Bytes: {2})", info.TempFolder, info.WriteAccessTempFolder, info.TempFolderFreeBytes);
                     Console.WriteLine(" - Executable: {0} (Root drive: {1}, Write Access: {2}, Free Bytes: {3})", info.Executable, info.RootDrive, info.WriteAccessRoot, info.CurrentDriveFreeBytes);
                 }
                 #endregion
@@ -1376,13 +1391,24 @@ namespace ReadinessTool
                             };
 
                             var results = bigTest.Execute();
+
                             if (!Silent & Verbose)
                                 HideCounters();
 
                             if (!breakTest)
-                            { 
+                            {
                                 info.ReadScore = bigTest.ReadScore;
                                 info.WriteScore = bigTest.WriteScore;
+
+                                if (results != null)
+                                {
+                                    //overwrite the values read from bigTest
+                                    foreach (TestResults tr in results)
+                                    {
+                                        if (tr.TestName.Equals("SequentialWriteTest")) info.WriteScore = tr.AvgThroughput;
+                                        if (tr.TestName.Equals("SequentialReadTest")) info.ReadScore = tr.AvgThroughput;
+                                    }
+                                }
 
                                 if (!Silent)
                                 {
@@ -1392,7 +1418,7 @@ namespace ReadinessTool
                                         Console.WriteLine("\n   Test file deleted.");
                                     }
                                     Console.ForegroundColor = ConsoleColor.White;
-                                    Console.WriteLine("\n - Drive Speed: Read {0:0.00} MB/s, Write {1:0.00} MB/s", info.ReadScore, info.WriteScore);
+                                    Console.WriteLine("\n - Drive Speed (sequential): Read {0:0.00} MB/s, sequential Write {1:0.00} MB/s", info.ReadScore, info.WriteScore);
                                     Console.ResetColor();
                                 }
 
@@ -1434,7 +1460,7 @@ namespace ReadinessTool
                             {
                                 if (info.ReadScore >= msr && info.WriteScore >= msw) checkResult.Result = ResultType.succeeded;
 
-                                checkResult.ResultInfo = String.Format("ReadScore: {0:0.00} (expected: {1}) WriteScore: {2:0.00} (expected: {3})",
+                                checkResult.ResultInfo = String.Format("ReadScore (sequential): {0:0.00} (expected: {1}) WriteScore (sequential): {2:0.00} (expected: {3})",
                                     info.ReadScore,
                                     msr,
                                     info.WriteScore,
@@ -1937,6 +1963,7 @@ namespace ReadinessTool
                     {
                         Console.ForegroundColor = ConsoleColor.Green;
                         if(!Silent) Console.WriteLine("This computer is suitable to run the " + studyName + " test system.");
+                        Console.WriteLine(" ");
                         info.OverallResult = "This computer is suitable to run the " + studyName + " test system.";
                     }
                     else
