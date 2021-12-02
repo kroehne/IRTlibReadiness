@@ -362,7 +362,16 @@ namespace ReadinessTool
             }
             else
             {
-                _ret += "- Player run results missing\n";
+
+                if(this.DoApplicationStartAfterCheck | this.DoApplicationStartBeforeCheck)
+                {
+                    _ret += "- IRTlibPlayer run results missing\n";
+
+                }
+                else
+                {
+                    _ret += "- The IRTlibPlayer was not configured to run\n";
+                }
             }
             _ret += "\n";
 

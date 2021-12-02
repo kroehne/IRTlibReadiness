@@ -14,7 +14,6 @@ using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using YamlDotNet.Serialization;
 using Newtonsoft.Json;
@@ -29,6 +28,113 @@ using System.IO.Compression;
 
 namespace ReadinessTool
 {
+
+    public class ThreadWindowObserver
+    {
+
+        [DllImport("user32.dll")]
+        static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+
+        // State information used in the task.
+        private string windowToWatchFor;
+        private Process process;
+        private int threadWaitTime = 2000; //ms
+        private int threadWaitTimeMultiplier = 30; // 1 minute
+        private bool dbg = false;
+
+        // The constructor obtains the state information.
+        public ThreadWindowObserver(string text, Process number, bool debug = false)
+        {
+            windowToWatchFor = text;
+            process = number;
+            dbg = debug;
+        }
+
+        // The thread procedure performs the task, such as formatting
+        // and printing a document.
+        public void ThreadProc()
+        {
+            if(dbg) Console.WriteLine("Thread: observing window \"" + windowToWatchFor + "\"");
+
+            int waitCnt = 0;
+            string activeWin = "";
+
+            //wait for the window to appear
+            activeWin = GetActiveWindowTitle();
+            if (dbg) Console.WriteLine("Thread: waiting for the window to observe...");
+            while (!activeWin.Equals(windowToWatchFor) && waitCnt <= threadWaitTimeMultiplier)
+            {
+                Thread.Sleep(threadWaitTime);
+                activeWin = GetActiveWindowTitle();
+                waitCnt++;
+                if (dbg) Console.WriteLine("Thread: waiting counter is " + waitCnt + ", active window is " + activeWin);
+            }
+
+            if (dbg) Console.WriteLine("Thread: active window is \"" + activeWin + "\"");
+
+            if (activeWin.Equals(windowToWatchFor))
+            {
+                if (dbg) Console.WriteLine("Thread: waiting for the window to observe to disappear... ");
+                //wait for the window to disappear
+                while (activeWin.Equals(windowToWatchFor))
+                {
+                    Thread.Sleep(threadWaitTime);
+                    activeWin = GetActiveWindowTitle();
+                }
+                if (dbg) Console.WriteLine("Thread: window to observe has disappeared or is no more active.");
+
+                if (dbg) Console.WriteLine("Thread: waiting for the process to exit... ");
+                waitCnt = 0;
+                while (!process.HasExited && waitCnt <= threadWaitTimeMultiplier)
+                {
+                    Thread.Sleep(threadWaitTime);
+                    waitCnt++;
+                    if (dbg) Console.WriteLine("Thread: waiting counter is " + waitCnt);
+                }
+                if (!process.HasExited)
+                {
+                    if (dbg) Console.WriteLine("Thread: process hasn't exited yet, will kill it manually (1).");
+                    process.Kill();
+                }
+                else
+                {
+                    if (dbg) Console.WriteLine("Thread: process has exited.");
+                }
+            }
+            else
+            {   //the window to observe did not appear
+                Console.WriteLine("Thread: the window to observe did not appear.");
+
+                if (!process.HasExited)
+                {
+                    if (dbg) Console.WriteLine("Thread: process hasn't exited yet, will kill it manually (2).");
+                    process.Kill();
+                }
+                else
+                {
+                    if (dbg) Console.WriteLine("Thread: process has exited or wasn't started.");
+                }
+            }
+        }
+
+        static private string GetActiveWindowTitle()
+        {
+            const int nChars = 256;
+            StringBuilder Buff = new StringBuilder(nChars);
+            IntPtr handle = GetForegroundWindow();
+
+            if (GetWindowText(handle, Buff, nChars) > 0)
+            {
+                return Buff.ToString();
+            }
+            //return null;
+            return "";
+        }
+    }
+
     class Program
     { 
         static void Main(string[] args)
@@ -39,6 +145,12 @@ namespace ReadinessTool
             bool WMIexceptionOccurred = false;
 
             List<string> RegistryKeys = new List<string>() { @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation" };
+
+            //initialize the time when the player is started to a time long ago
+            //this is used to find the player's output file later
+            DateTime playerStartTime = new DateTime(2000, 1, 1);
+            DateTime playerInitStartTime = playerStartTime;
+            string playerWindowTitle = "DIPF TestApp Standalone";
 
             #region ConfigurationData
 
@@ -60,7 +172,7 @@ namespace ReadinessTool
             string configFilePathJson = System.IO.Path.Combine(strWorkPath, configFileNameJson);
             string tempPath = System.IO.Path.Combine(strWorkPath, "temp");
 
-            //suffixes for the result output files
+            //prefixes for the result output files
             string resultFileNameText = "ReadinessResult_";
             string resultFileNameYaml = "ReadinessResult_";
             string resultFileNameJson = "ReadinessResult_";
@@ -69,6 +181,8 @@ namespace ReadinessTool
             string resultFilePathJson = "";
             string studyName = "";
             List<string> libPlayerCheckList = new List<string>();
+
+            bool debug = false;
 
             ConfigurationMap configurationMap = new ConfigurationMap();
             CheckResults checkResults = new CheckResults();
@@ -200,6 +314,11 @@ namespace ReadinessTool
                 libPlayerCheckList = new List<string>(parameterValue.Value.Split(','));
             }
 
+            if (configurationMap.Parameters.TryGetValue("Debug", out parameterValue))
+            {
+                debug = parameterValue.Value.ToLower().Equals("true");
+            }
+
             #endregion
 
             info.AppFolder = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
@@ -264,6 +383,11 @@ namespace ReadinessTool
                         libPlayerCheckList = new List<string>(libPlayerChecks.Split(','));
                     }
 
+                    if (Configuration["Debug"] != null)
+                    {
+                        debug = Configuration["Debug"].ToString().ToLower().Equals("true");
+                    }
+
                 }
             }
             catch (Exception e)
@@ -277,6 +401,15 @@ namespace ReadinessTool
 
             try
             {
+                //show the application version info
+                if (!Silent)
+                {
+                    string debugMode = debug == true ? "running in debug mode" : "";
+                    Console.ForegroundColor = ConsoleColor.Blue;
+                    Console.WriteLine("IRTlib: Readiness-Tool ({0}) {1}\n", info.Version, debugMode);
+                    Console.ResetColor();
+                }
+
                 #region START PLAYER BEFORE 
 
                 info.PlayerAvailable = File.Exists(Path.Combine(info.AppFolder, info.AppName));
@@ -287,6 +420,7 @@ namespace ReadinessTool
 
                     if (File.Exists(Path.Combine(info.AppFolder, info.AppName)))
                     {
+                        if (!Silent) Console.WriteLine("The Player will now be started...");
                         try
                         {
                             var process = new Process
@@ -296,24 +430,35 @@ namespace ReadinessTool
                                     FileName = Path.Combine(info.AppFolder, info.AppName),
                                     Arguments = string.Join(" ", args),
                                     UseShellExecute = false,
-                                    RedirectStandardOutput = true,
+                                    RedirectStandardOutput = false,
                                     CreateNoWindow = true
                                 }
                             };
 
+                            ThreadWindowObserver two = new ThreadWindowObserver(
+                                playerWindowTitle, process, debug);
+
+                            // Create a thread to execute the task, and then
+                            // start the thread.
+                            Thread t = new Thread(new ThreadStart(two.ThreadProc));
+                            t.Start();
+
                             if (process.Start())
                             {
+                                //remember the time when the player is started
+                                playerStartTime = DateTime.Now;
                                 info.PlayerStarted = true;
                             }
 
+                            /*
                             while (!process.StandardOutput.EndOfStream)
                             {
                                 var line = process.StandardOutput.ReadLine();
                                 Console.WriteLine(line);
                             }
-
+                            */
                             process.WaitForExit();
-                            return;
+                            //return;
 
                         }
                         catch (Exception e)
@@ -324,19 +469,11 @@ namespace ReadinessTool
                             info.PlayerStarted = false;
                         }
                     }
-
                 }
 
                 #endregion
 
                 #region STARTUP 
-
-                if (!Silent)
-                {
-                    Console.ForegroundColor = ConsoleColor.Blue;
-                    Console.WriteLine("IRTlib: Readiness-Tool ({0})\n", info.Version);
-                    Console.ResetColor();
-                }
 
                 if (!Silent & Verbose)
                 {
@@ -1387,7 +1524,7 @@ namespace ReadinessTool
                                     info.DoDriveSpeedTest = false;
                                 }
 
-                                if(!Silent) ShowCounters(bigTest);
+                                if(!Silent & Verbose) ShowCounters(bigTest);
                             };
 
                             var results = bigTest.Execute();
@@ -1561,10 +1698,6 @@ namespace ReadinessTool
                 #endregion
 
                 #region START PLAYER AFTER
-                //initialize the time when the player is started to a time long ago
-                //this is used to find the player's output file later
-                DateTime playerStartTime = new DateTime(2000 ,1,1);
-                DateTime playerInitStartTime = playerStartTime;
 
                 if (info.DoApplicationStartAfterCheck)
                 {
@@ -1588,10 +1721,18 @@ namespace ReadinessTool
                                         FileName = Path.Combine(info.AppFolder, info.AppName),
                                         Arguments = string.Join(" ", args),
                                         UseShellExecute = false,
-                                        RedirectStandardOutput = true,
+                                        RedirectStandardOutput = false,
                                         CreateNoWindow = true
                                     }
                                 };
+
+                                ThreadWindowObserver two = new ThreadWindowObserver(
+                                    playerWindowTitle, process, debug);
+
+                                // Create a thread to execute the task, and then
+                                // start the thread.
+                                Thread t = new Thread(new ThreadStart(two.ThreadProc));
+                                t.Start();
 
                                 if (process.Start())
                                 {
@@ -1599,13 +1740,13 @@ namespace ReadinessTool
                                     playerStartTime = DateTime.Now;
                                     info.PlayerStarted = true;
                                 }
-
+                                /*
                                 while (!process.StandardOutput.EndOfStream)
                                 {
                                     var line = process.StandardOutput.ReadLine();
                                     if (!Silent) Console.WriteLine(line);
                                 }
-
+                                */
                                 process.WaitForExit();
 
                             }
@@ -1637,128 +1778,129 @@ namespace ReadinessTool
                 #endregion
 
                 #region GETRESULTFROMPLAYER
-
                 Dictionary<string, string> hitScore = new Dictionary<string, string>();
                 Dictionary<string, string> missScore = new Dictionary<string, string>();
-                string playerOutputZipFile = "";
-                string playerOutputScoreFile = "";
 
-                if (info.PlayerStarted && (playerInitStartTime != playerStartTime))
-                //if (true)
+                if (info.DoApplicationStartAfterCheck | info.DoApplicationStartBeforeCheck)
                 {
-                    if (Directory.Exists(strPlayerResultPath)) 
+
+                    string playerOutputZipFile = "";
+                    string playerOutputScoreFile = "";
+
+                    if (info.PlayerStarted && (playerInitStartTime != playerStartTime))
+                    //if (true)
                     {
-                        //find the relevant output of the player
-
-                        DirectoryInfo dirInfo = new DirectoryInfo(strPlayerResultPath);
-                        FileInfo[] files = dirInfo.GetFiles().OrderBy(p => p.CreationTime).ToArray();
-                        foreach (FileInfo file in files)
+                        if (Directory.Exists(strPlayerResultPath))
                         {
-                            //looking for a file written after the player was started
-                            if(file.CreationTime > playerStartTime) {
-                                if (!Silent) Console.WriteLine("Player output file is: " + file.FullName);
-                                playerOutputZipFile = file.FullName;
-                                break;
-                            }
-                        }
+                            //find the relevant output of the player
 
-                        //extract the scoring file
-                        //create a temp folder
-                        if (!Directory.Exists(tempPath))
-                        {
-                            try
+                            DirectoryInfo dirInfo = new DirectoryInfo(strPlayerResultPath);
+                            FileInfo[] files = dirInfo.GetFiles().OrderBy(p => p.CreationTime).ToArray();
+                            foreach (FileInfo file in files)
                             {
-                                dirInfo = Directory.CreateDirectory(tempPath);
-                            }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine("The process failed: {0}", e.ToString());
-                            }
-                        }
-                        if (dirInfo.Exists) 
-                        {
-                            try
-                            {
-                                ZipFile.ExtractToDirectory(playerOutputZipFile, tempPath, true);
-                            }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine("The process failed: {0}", e.ToString());
-                            }
-                        }
-                        playerOutputScoreFile = System.IO.Path.Combine(tempPath, "ItemScore.json");
-                        if (!File.Exists(playerOutputScoreFile)) playerOutputScoreFile = "";
-                    }
-                    else
-                    {
-                        if (!Silent) Console.WriteLine("Player output folder not found: " + strPlayerResultPath);
-                        //the player output folder doesn't exist
-                    }
-
-                    if(playerOutputScoreFile.Length > 0)
-                    {
-                        string[] jsonScoreString = File.ReadAllLines(playerOutputScoreFile);
-
-                        for(int lineCnt=0; lineCnt < jsonScoreString.Length; lineCnt++)
-                        {
-                            if (jsonScoreString[lineCnt].EndsWith(',')) { jsonScoreString[lineCnt] = jsonScoreString[lineCnt].Substring(0, jsonScoreString[lineCnt].Length - 1); }
-
-                            JsonTextReader reader = new JsonTextReader(new StringReader(jsonScoreString[lineCnt]));
-
-                            string PropertyName = "";
-
-                            while (reader.Read())
-                            {
-                                if (reader.Value != null)
+                                //looking for a file written after the player was started
+                                if (file.CreationTime > playerStartTime)
                                 {
-                                    //Console.WriteLine("Token: {0}, Value: {1}", reader.TokenType, reader.Value);
+                                    if (!Silent) Console.WriteLine("Player output file is: " + file.FullName);
+                                    playerOutputZipFile = file.FullName;
+                                    break;
+                                }
+                            }
 
-                                    if (PropertyName.Equals("ItemScore"))
+                            //extract the scoring file
+
+                            //create a temp folder
+                            if (!Directory.Exists(tempPath))
+                            {
+                                try
+                                {
+                                    dirInfo = Directory.CreateDirectory(tempPath);
+                                }
+                                catch (Exception e)
+                                {
+                                    Console.WriteLine("Process has failed: Creating temp dir \"{0}\"{1}", tempPath, e.ToString());
+                                }
+                            }
+                            if (dirInfo.Exists)
+                            {
+                                if (File.Exists(playerOutputZipFile))
+                                {
+                                    try
                                     {
-                                        string[] scoreInfo = reader.Value.ToString().Replace('{', ' ').Replace('}', ' ').Split(',');
-                                        for (int cnt = 0; cnt < scoreInfo.Length; cnt++)
-                                        {
-                                            //remove some disturbing characters
-                                            scoreInfo[cnt] = scoreInfo[cnt].Replace('"', ' ');
-                                            scoreInfo[cnt] = scoreInfo[cnt].Replace('\\', ' ').Trim();
-                                            string[] scoreDetails = scoreInfo[cnt].Split(':');
-                                            if (scoreDetails.Length == 2)
-                                            {
-                                                string key = scoreDetails[0].Trim();
-                                                string val = scoreDetails[1].Trim();
+                                        ZipFile.ExtractToDirectory(playerOutputZipFile, tempPath, true);
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        Console.WriteLine("Process has failed: Unzip file \"{0}\" {1}", playerOutputZipFile, e.ToString());
+                                    }
+                                }
+                            }
+                            playerOutputScoreFile = System.IO.Path.Combine(tempPath, "ItemScore.json");
+                        }
+                        else
+                        {
+                            if (!Silent) Console.WriteLine("Player output folder not found: " + strPlayerResultPath);
+                            //the player output folder doesn't exist
+                        }
 
-                                                if (key.ToLower().StartsWith("hit."))
+                        if (File.Exists(playerOutputScoreFile))
+                        {
+                            string[] jsonScoreString = File.ReadAllLines(playerOutputScoreFile);
+
+                            for (int lineCnt = 0; lineCnt < jsonScoreString.Length; lineCnt++)
+                            {
+                                if (jsonScoreString[lineCnt].EndsWith(',')) { jsonScoreString[lineCnt] = jsonScoreString[lineCnt].Substring(0, jsonScoreString[lineCnt].Length - 1); }
+
+                                JsonTextReader reader = new JsonTextReader(new StringReader(jsonScoreString[lineCnt]));
+
+                                string PropertyName = "";
+
+                                while (reader.Read())
+                                {
+                                    if (reader.Value != null)
+                                    {
+                                        //Console.WriteLine("Token: {0}, Value: {1}", reader.TokenType, reader.Value);
+
+                                        if (PropertyName.Equals("ItemScore"))
+                                        {
+                                            string[] scoreInfo = reader.Value.ToString().Replace('{', ' ').Replace('}', ' ').Split(',');
+                                            for (int cnt = 0; cnt < scoreInfo.Length; cnt++)
+                                            {
+                                                //remove some disturbing characters
+                                                scoreInfo[cnt] = scoreInfo[cnt].Replace('"', ' ');
+                                                scoreInfo[cnt] = scoreInfo[cnt].Replace('\\', ' ').Trim();
+                                                string[] scoreDetails = scoreInfo[cnt].Split(':');
+                                                if (scoreDetails.Length == 2)
                                                 {
-                                                    if (val.ToLower().Equals("true"))
-                                                        if(!hitScore.ContainsKey(key)) hitScore.Add(key, val);
-                                                }
-                                                if (key.ToLower().StartsWith("miss."))
-                                                {
-                                                    if (val.ToLower().Equals("true"))
-                                                        if(!missScore.ContainsKey(key)) missScore.Add(key, val);
+                                                    string key = scoreDetails[0].Trim();
+                                                    string val = scoreDetails[1].Trim();
+
+                                                    if (key.ToLower().StartsWith("hit."))
+                                                    {
+                                                        if (val.ToLower().Equals("true"))
+                                                            if (!hitScore.ContainsKey(key)) hitScore.Add(key, val);
+                                                    }
+                                                    if (key.ToLower().StartsWith("miss."))
+                                                    {
+                                                        if (val.ToLower().Equals("true"))
+                                                            if (!missScore.ContainsKey(key)) missScore.Add(key, val);
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
 
-                                    if (reader.TokenType == JsonToken.PropertyName)
-                                        PropertyName = reader.Value.ToString();
+                                        if (reader.TokenType == JsonToken.PropertyName)
+                                            PropertyName = reader.Value.ToString();
+                                        else
+                                            PropertyName = "";
+                                    }
                                     else
-                                        PropertyName = "";
-                                }
-                                else
-                                {
-                                    //Console.WriteLine("Token: {0}", reader.TokenType);
+                                    {
+                                        //Console.WriteLine("Token: {0}", reader.TokenType);
+                                    }
                                 }
                             }
                         }
-                    }
-                }
-                else
-                {
-                    if (!Silent)
-                    {
-                        Console.WriteLine(string.Format("Player did not start (Starttime: {0} )", playerStartTime));
                     }
                 }
                 #endregion
@@ -1827,114 +1969,123 @@ namespace ReadinessTool
                     Console.WriteLine(" ");
                     Console.ResetColor();
 
-                    string[] hitNames = { "hit.hit01_KIOSK", "hit.hit01_TOUCH", "hit.hit02_TOUCH", "hit.hit01_AUDIO", "hit.hit01_TLMENU", "hit.hit02_TLMENU", "hit.hit03_TLMENU", "hit.hit01_AreaVisible_RB02", "hit.hit02_LinesVisible_RB02" };
-                    string[] hitTexts = { "Kiosk mode and Alt-Tab", "Drag and Drop by mouse", "Drag and Drop by touch", "Audio: playback and volume adjustment", "Testleiter Menue: Open", "Testleiter Menue: Volume adjustment", "Testleiter Menue: Next button", "Screen: Item area completely visible", "Screen: Lines completely visible" };
-                    string[] missNames = { "miss.miss01_KIOSK", "miss.miss02_KIOSK", "miss.miss01_TOUCH", "miss.miss01_AUDIO", "miss.miss02_AUDIO", "miss.miss01_TLMENU", "miss.miss02_TLMENU", "miss.miss03_TLMENU", "miss.miss01_AreaVisible_RB01", "miss.miss02_LinesVisible_RB01" };
-                    string[] missTexts = { "Kiosk mode and ALt-Tab: Taskbar or window appeared", "Kiosk mode and Alt Tab: leaving test possible", "Drag and Drop", "Audio: playback but no adjustment", "Audio: no playback at all", "Testleiter Menue: Open", "Testleiter Menue: Volume adjustment", "Testleiter Menue: Next button", "Screen: Item area completely visible", "Screen: Lines completely visible" };
-
-                    if (hitScore.Count == 0 && missScore.Count == 0)
+                    if (info.DoApplicationStartAfterCheck | info.DoApplicationStartBeforeCheck)
                     {
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine("No IRTlibPlayer diagnose result found.");
-                        Console.WriteLine("This part of the system diagnosis seems to have failed.");
-                        Console.ResetColor();
-                        suitable = false;
+                        string[] hitNames = { "hit.hit01_KIOSK", "hit.hit01_TOUCH", "hit.hit02_TOUCH", "hit.hit01_AUDIO", "hit.hit01_TLMENU", "hit.hit02_TLMENU", "hit.hit03_TLMENU", "hit.hit01_AreaVisible_RB02", "hit.hit02_LinesVisible_RB02" };
+                        string[] hitTexts = { "Kiosk mode and Alt-Tab", "Drag and Drop by mouse", "Drag and Drop by touch", "Audio: playback and volume adjustment", "Testleiter Menue: Open", "Testleiter Menue: Volume adjustment", "Testleiter Menue: Next button", "Screen: Item area completely visible", "Screen: Lines completely visible" };
+                        string[] missNames = { "miss.miss01_KIOSK", "miss.miss02_KIOSK", "miss.miss01_TOUCH", "miss.miss01_AUDIO", "miss.miss02_AUDIO", "miss.miss01_TLMENU", "miss.miss02_TLMENU", "miss.miss03_TLMENU", "miss.miss01_AreaVisible_RB01", "miss.miss02_LinesVisible_RB01" };
+                        string[] missTexts = { "Kiosk mode and ALt-Tab: Taskbar or window appeared", "Kiosk mode and Alt Tab: leaving test possible", "Drag and Drop", "Audio: playback but no adjustment", "Audio: no playback at all", "Testleiter Menue: Open", "Testleiter Menue: Volume adjustment", "Testleiter Menue: Next button", "Screen: Item area completely visible", "Screen: Lines completely visible" };
+
+                        if (hitScore.Count == 0 && missScore.Count == 0)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("No IRTlibPlayer diagnose result found.");
+                            Console.WriteLine("This part of the system diagnosis seems to have failed.");
+                            Console.ResetColor();
+                            suitable = false;
+                        }
+                        else
+                        {
+                            //Console.WriteLine("Hits");
+                            for (int hitCnt = 0; hitCnt < hitNames.Length; hitCnt++)
+                            {
+                                if (hitScore.ContainsKey(hitNames[hitCnt]))
+                                {
+                                    Console.ForegroundColor = ConsoleColor.Green;
+                                    if (!Silent) Console.WriteLine(hitTexts[hitCnt] + ": OK");
+                                    info.PlayerResults.Add(hitTexts[hitCnt] + ": OK");
+                                }
+                            }
+                            Console.ResetColor();
+                            //Console.WriteLine("Misses");
+                            for (int missCnt = 0; missCnt < missNames.Length; missCnt++)
+                            {
+                                if (missScore.ContainsKey(missNames[missCnt]))
+                                {
+                                    Console.ForegroundColor = ConsoleColor.Red;
+                                    if (!Silent) Console.WriteLine(missTexts[missCnt] + ": not OK");
+                                    info.PlayerResults.Add(missTexts[missCnt] + ": not OK");
+                                    suitable = false;
+                                }
+                            }
+                            Console.ResetColor();
+
+                            //check for missing answers
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            //Kiosk
+                            if (libPlayerCheckList.Contains("KIOSK"))
+                            {
+                                if (!hitScore.ContainsKey("hit.hit01_KIOSK"))
+                                    if (!missScore.ContainsKey("miss.miss01_KIOSK"))
+                                        if (!missScore.ContainsKey("miss.miss02_KIOSK"))
+                                        {
+                                            if (!Silent) Console.WriteLine("Question \"Kiosk Modus / ALt-Tab\" is not answered.");
+                                            info.PlayerResults.Add("Question \"Kiosk Modus / ALt-Tab\" is not answered.");
+                                            suitable = false;
+                                        }
+                            }
+
+                            if (libPlayerCheckList.Contains("TOUCH"))
+                            {
+                                if (!hitScore.ContainsKey("hit.hit01_TOUCH") && !hitScore.ContainsKey("hit.hit02_TOUCH"))
+                                    if (!missScore.ContainsKey("miss.miss01_TOUCH"))
+                                    {
+                                        if (!Silent) Console.WriteLine("Question \"Kiosk Modus / Drag and Drop\" is not answered.");
+                                        info.PlayerResults.Add("Question \"Kiosk Modus / Drag and Drop\" is not answered.");
+                                        suitable = false;
+                                    }
+                            }
+
+                            //Audio
+                            if (libPlayerCheckList.Contains("AUDIO"))
+                            {
+
+                                if (!hitScore.ContainsKey("hit.hit01_AUDIO"))
+                                    if (!missScore.ContainsKey("miss.miss01_AUDIO"))
+                                        if (!missScore.ContainsKey("miss.miss02_AUDIO"))
+                                        {
+                                            if (!Silent) Console.WriteLine("Question \"Audio\" is not answered.");
+                                            info.PlayerResults.Add("Question \"Audio\" is not answered.");
+                                            suitable = false;
+                                        }
+                            }
+                            Console.ResetColor();
+
+                            if (libPlayerCheckList.Contains("TLMENU"))
+                            {
+                                //TL Menu (these answers are skipped if the page was left by using the TL Menu
+                                if (!Silent) Console.WriteLine("\nHint: The questions concerning the TL Menue are skipped if the Next button of the TL menu was clicked.\n");
+                                if (!hitScore.ContainsKey("hit.hit01_TLMENU"))
+                                    if (!missScore.ContainsKey("miss.miss01_TLMENU"))
+                                    {
+                                        if (!Silent) Console.WriteLine("Question \"TL Menue / Open\" is not answered.");
+                                        info.PlayerResults.Add("Question \"TL Menue / Open\" is not answered.");
+                                    }
+
+                                if (libPlayerCheckList.Contains("AUDIO"))
+                                {
+                                    if (!hitScore.ContainsKey("hit.hit02_TLMENU"))
+                                        if (!missScore.ContainsKey("miss.miss02_TLMENU"))
+                                        {
+                                            if (!Silent) Console.WriteLine("Question \"TL Menue / Audio adjustment\" is not answered.");
+                                            info.PlayerResults.Add("Question \"TL Menue / Audio adjustment\" is not answered.");
+                                        }
+                                }
+                                if (!hitScore.ContainsKey("hit.hit03_TLMENU"))
+                                    if (!missScore.ContainsKey("miss.miss03_TLMENU"))
+                                    {
+                                        if (!Silent) Console.WriteLine("Question \"TL Menue / Next button\" is not answered.");
+                                        info.PlayerResults.Add("Question \"TL Menue / Next button\" is not answered.");
+                                    }
+                            }
+                            //the Screen questions don't need to be checked (not possible to end the test without giving answers)
+                        }
                     }
                     else
                     {
-                        //Console.WriteLine("Hits");
-                        for (int hitCnt = 0; hitCnt < hitNames.Length; hitCnt++)
-                        {
-                            if (hitScore.ContainsKey(hitNames[hitCnt]))
-                            {
-                                    Console.ForegroundColor = ConsoleColor.Green;
-                                    if(!Silent) Console.WriteLine(hitTexts[hitCnt] + ": OK");
-                                    info.PlayerResults.Add(hitTexts[hitCnt] + ": OK");
-                            }
-                        }
+                        Console.ForegroundColor = ConsoleColor.DarkYellow;
+                        if (!Silent) Console.WriteLine("The IRTlibPlayer was not configured to run.");
                         Console.ResetColor();
-                        //Console.WriteLine("Misses");
-                        for (int missCnt = 0; missCnt < missNames.Length; missCnt++)
-                        {
-                            if (missScore.ContainsKey(missNames[missCnt]))
-                            {
-                                    Console.ForegroundColor = ConsoleColor.Red;
-                                    if(!Silent) Console.WriteLine(missTexts[missCnt] + ": not OK");
-                                    info.PlayerResults.Add(missTexts[missCnt] + ": not OK");
-                                    suitable = false;
-                            }
-                        }
-                        Console.ResetColor();
-
-                        //check for missing answers
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        //Kiosk
-                        if (libPlayerCheckList.Contains("KIOSK"))
-                        {
-                            if (!hitScore.ContainsKey("hit.hit01_KIOSK"))
-                                if (!missScore.ContainsKey("miss.miss01_KIOSK"))
-                                    if (!missScore.ContainsKey("miss.miss02_KIOSK"))
-                                    {
-                                        if (!Silent) Console.WriteLine("Question \"Kiosk Modus / ALt-Tab\" is not answered.");
-                                        info.PlayerResults.Add("Question \"Kiosk Modus / ALt-Tab\" is not answered.");
-                                        suitable = false;
-                                    }
-                        }
-
-                        if (libPlayerCheckList.Contains("TOUCH"))
-                        {
-                            if (!hitScore.ContainsKey("hit.hit01_TOUCH") && !hitScore.ContainsKey("hit.hit02_TOUCH"))
-                                if (!missScore.ContainsKey("miss.miss01_TOUCH"))
-                                {
-                                    if (!Silent) Console.WriteLine("Question \"Kiosk Modus / Drag and Drop\" is not answered.");
-                                    info.PlayerResults.Add("Question \"Kiosk Modus / Drag and Drop\" is not answered.");
-                                    suitable = false;
-                                }
-                        }
-
-                        //Audio
-                        if (libPlayerCheckList.Contains("AUDIO"))
-                        {
-
-                            if (!hitScore.ContainsKey("hit.hit01_AUDIO"))
-                                if (!missScore.ContainsKey("miss.miss01_AUDIO"))
-                                    if (!missScore.ContainsKey("miss.miss02_AUDIO"))
-                                    {
-                                        if (!Silent) Console.WriteLine("Question \"Audio\" is not answered.");
-                                        info.PlayerResults.Add("Question \"Audio\" is not answered.");
-                                        suitable = false;
-                                    }
-                        }
-                        Console.ResetColor();
-
-                        if (libPlayerCheckList.Contains("TLMENU"))
-                        {
-                            //TL Menu (these answers are skipped if the page was left by using the TL Menu
-                            if (!Silent) Console.WriteLine("\nHint: The questions concerning the TL Menue are skipped if the Next button of the TL menu was clicked.\n");
-                            if (!hitScore.ContainsKey("hit.hit01_TLMENU"))
-                                if (!missScore.ContainsKey("miss.miss01_TLMENU"))
-                                {
-                                    if (!Silent) Console.WriteLine("Question \"TL Menue / Open\" is not answered.");
-                                    info.PlayerResults.Add("Question \"TL Menue / Open\" is not answered.");
-                                }
-
-                            if (libPlayerCheckList.Contains("AUDIO"))
-                            {
-                                if (!hitScore.ContainsKey("hit.hit02_TLMENU"))
-                                    if (!missScore.ContainsKey("miss.miss02_TLMENU"))
-                                    {
-                                        if (!Silent) Console.WriteLine("Question \"TL Menue / Audio adjustment\" is not answered.");
-                                        info.PlayerResults.Add("Question \"TL Menue / Audio adjustment\" is not answered.");
-                                    }
-                            }
-                            if (!hitScore.ContainsKey("hit.hit03_TLMENU"))
-                                if (!missScore.ContainsKey("miss.miss03_TLMENU"))
-                                {
-                                    if (!Silent) Console.WriteLine("Question \"TL Menue / Next button\" is not answered.");
-                                    info.PlayerResults.Add("Question \"TL Menue / Next button\" is not answered.");
-                                }
-                        }
-                        //the Screen questions don't need to be checked (not possible to end the test without giving answers)
                     }
                     //remove the temp folder
                     if (Directory.Exists(tempPath))
@@ -1945,7 +2096,7 @@ namespace ReadinessTool
                         }
                         catch (Exception e)
                         {
-                            Console.WriteLine("The process failed: {0}", e.ToString());
+                            Console.WriteLine("Process failed: Deleting folder {0}\n {1}",tempPath, e.ToString());
                         }
                     }
                     //IRTlibPlayer results -
@@ -1961,10 +2112,18 @@ namespace ReadinessTool
 
                     if (suitable)
                     {
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        if(!Silent) Console.WriteLine("This computer is suitable to run the " + studyName + " test system.");
-                        Console.WriteLine(" ");
-                        info.OverallResult = "This computer is suitable to run the " + studyName + " test system.";
+                        string summaryText = "This computer is suitable to run the " + studyName + " test system.";
+                        if (info.DoApplicationStartAfterCheck | info.DoApplicationStartBeforeCheck)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Green;
+                        }
+                        else
+                        {
+                            Console.ForegroundColor = ConsoleColor.DarkYellow;
+                            summaryText += "\nPlease consider that the IRTlibPlayer diagnosis wasn't processed.";
+                        }
+                        if(!Silent) Console.WriteLine(summaryText);
+                        info.OverallResult = summaryText;
                     }
                     else
                     {
@@ -1972,15 +2131,15 @@ namespace ReadinessTool
                         if (!Silent)
                         {
                             Console.WriteLine("One or more checks of the system diagnose have failed or");
-                            Console.WriteLine("maybe there are missing answers of the IRTlibPlayer diagnose.");
+                            Console.WriteLine("maybe there are missing answers of the IRTlibPlayer diagnosis.");
                             Console.WriteLine("");
                             Console.WriteLine("Please check the output for details.");
                             Console.WriteLine("");
                             Console.WriteLine("This computer is not suitable to run the " + studyName + " test system.");
-                            Console.WriteLine(" ");
                         }
                         info.OverallResult = "This computer is not suitable to run the " + studyName + " test system.";
                     }
+                    Console.WriteLine(" ");
                     Console.ResetColor();
                     //Overall result -
 
