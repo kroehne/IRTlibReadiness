@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using Microsoft.Win32;
+using Saplin.StorageSpeedMeter;
 
 namespace ReadinessTool
 {
@@ -35,11 +36,31 @@ namespace ReadinessTool
         public bool Is64BitOS { get; set; }
         public bool Is64BitProcess { get; set; }
 
-        public double TotalRam { get; set; }
-        public double FreeRam { get; set; }
+        //private static double TotalRam { get; set; }
+        private static double TotalRam;
+        public static double totalRam
+        {
+            get => TotalRam;
+        }
 
-        public string TotalMemorySystem { get; set; }
-        public string FreeMemorySystem { get; set; }
+        private static double FreeRam;
+        public static double freeRam
+        {
+            get => FreeRam;
+        }
+
+        private static string TotalMemorySystem;
+        public static string totalMemorySystem
+        {
+            get => TotalMemorySystem;
+        }
+
+        private static string FreeMemorySystem;
+        public static string freeMemorySystem
+        {
+            get => FreeMemorySystem;
+        }
+
         public string CPUUse { get; set; }
         public string CPUType { get; set; }
         public bool TouchEnabled { get; set; }
@@ -167,6 +188,29 @@ namespace ReadinessTool
         }
         #endregion
 
+        static string HKLM_GetString(string path, string key)
+        {
+            try
+            {
+                RegistryKey rk = Registry.LocalMachine.OpenSubKey(path);
+                if (rk == null) return "";
+                return (string)rk.GetValue(key);
+            }
+            catch { return ""; }
+        }
+
+        public static string FriendlyName()
+        {
+            string ProductName = HKLM_GetString(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion", "ProductName");
+            string CSDVersion = HKLM_GetString(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion", "CSDVersion");
+            if (ProductName != "")
+            {
+                return (ProductName.StartsWith("Microsoft") ? "" : "Microsoft ") + ProductName +
+                            (CSDVersion != "" ? " " + CSDVersion : "");
+            }
+            return "";
+        }
+
         public SystemInfo()
         {
             #region SYSTEM
@@ -197,6 +241,9 @@ namespace ReadinessTool
             FreeMemorySystem = "";
             CPUUse = "";
             CPUType = "";
+            TotalRam = (double)RamDiskUtil.TotalRam;
+            FreeRam = (double)RamDiskUtil.FreeRam;
+
             try
             {
                 var memorielines = GetWmicOutput("OS get FreePhysicalMemory,TotalVisibleMemorySize /Value").Split("\n");
@@ -293,95 +340,49 @@ namespace ReadinessTool
         public override string ToString()
         {
             string _ret = "";
-            _ret += String.Format("IRTlib: Readiness-Tool ({0})\n\n", this.Version);
+            //_ret += String.Format("IRTlib: Readiness-Tool ({0})\n\nAbout the system:\n\n", this.Version);
             _ret += String.Format("- Machine: {0} (Hostname: {1})\n", this.MachineName, this.HostName);
             _ret += String.Format("- System: {0} \"{1}\" (64 bit OS: {2} / 64 bit Process: {3})\n", this.OSVersion, this.OSName, this.Is64BitOS, this.Is64BitProcess);
             _ret += String.Format("- CPU: {0} (Usage: {1} %)\n", this.CPUType, this.CPUUse);
-            _ret += String.Format("- Memory: Total RAM = {0:0.00}Gb, Available RAM = {1:0.00}Gb\n", this.TotalRam / 1024 / 1024 / 1024, this.FreeRam / 1024 / 1024 / 1024);
+            //_ret += String.Format("- Memory: Total RAM = {0:0.00}Gb, Available RAM = {1:0.00}Gb\n", this.TotalRam / 1024 / 1024 / 1024, this.FreeRam / 1024 / 1024 / 1024);
+            _ret += String.Format("- Memory: Total RAM = {0:0.00}Gb, Available RAM = {1:0.00}Gb\n", totalRam / 1024 / 1024 / 1024, freeRam / 1024 / 1024 / 1024);
             _ret += String.Format("- Touch Enabled: {0} \n", this.TouchEnabled);
-            _ret += String.Format("- Current User: {0} (Roles: Administrator = {1}, User = {2}, Guest = {3})\n", this.UserName, this.IsAdministrator, this.IsUser, this.IsGuest);
-            _ret += String.Format("- .Net Framework version: {0} )\n", this.DotNetFrameworkVersion);
-            _ret += "\n";
+            //_ret += String.Format("- Current User: {0} (Roles: Administrator = {1}, User = {2}, Guest = {3})\n", this.UserName, this.IsAdministrator, this.IsUser, this.IsGuest);
+            _ret += String.Format("- .Net Framework version: {0} \n", this.DotNetFrameworkVersion);
 
-            _ret += String.Format("- Virus Applications: {0} Application(s) found\n", this.VirusDetais.Count);
-            foreach (var s in this.VirusDetais)
-                _ret += "   " + s + "\n";
-            _ret += "\n";
+            return _ret;
+        }
 
-            if (this.DoAudioCheck)
+        public string getManualDiagnosisResult()
+        {
+            string _ret = "Manual Player diagnosis:\n\n";
+
+            if (!(this.DoApplicationStartAfterCheck | this.DoApplicationStartBeforeCheck))
             {
-                _ret += String.Format("- Displays: {0} device(s) (Minimal Size: {1} - {2})\n", this.MonitorDetails.Count, this.MinimalScreenSize, this.MinimalScreenSizeCheck);
-                foreach (var s in this.MonitorDetails)
-                    _ret += "   " + s + "\n";
-                _ret += "\n";
+                return _ret += "- The Player was not configured to run\n";
             }
 
-            _ret += String.Format("- Audio: {0} device(s) (Test: {1})\n", this.NumberOfAudioDevices, this.PlayTestSuccess);
-            foreach (var s in this.AudioDetails)
-                _ret += "   " + s + "\n";
-            _ret += "\n";
-             
-            _ret += String.Format("- Network Connectivity: Ping = {0}, OpenRead = {1}\n", this.PingSucces, this.OpenReadSucces);
-
-            _ret += String.Format("- Local TCP/IP ports: {0} ports used", this.UsedPorts.Count);
-            _ret += String.Format("  " + string.Join(",", this.UsedPorts));
-            _ret += "\n\n";
-
-            if (this.DoPortScan)
+            if (this.PlayerAvailable && this.PlayerStarted)
             {
-                _ret += String.Format("- Check open TCP/IP ports: >= {0} of {1} ports available\n", this.FreePorts.Count, this.RequiredNumberOfPorts);
-                _ret += String.Format("  " + string.Join(",", this.FreePorts));
-                _ret += "\n\n";
-            }
-
-            _ret += String.Format("- Registry: Check {0} keys/value-pairs\n", this.RegistryDetails.Count);
-            foreach (var s in this.RegistryDetails)
-                _ret += "   " + s + "\n";
-            _ret += "\n";
-
-            _ret += String.Format("- Tempfolder: {0} (Write Access: {1}, Free Bytes: {2})\n", this.TempFolder, this.WriteAccessTempFolder, this.TempFolderFreeBytes);
-            _ret += String.Format("- Executable: {0} (Root drive: {1}, Write Access: {2}, Free Bytes: {3})\n", this.Executable, this.RootDrive, this.WriteAccessRoot, this.CurrentDriveFreeBytes);
-            _ret += "\n";
-
-            if (this.DoDriveSpeedTest)
-            { 
-                _ret += String.Format("- Drive Speed (sequential): Read {0:0.00} MB/s, Write {1:0.00} MB/s\n", this.ReadScore, this.WriteScore);
-                foreach (var s in this.SpeedDetails)
-                    _ret += "   " + s + "\n";
-                _ret += "\n";
-            }
-
-            _ret += String.Format("- Player (Found Application: {0}, Started: {1})\n", this.PlayerAvailable, this.PlayerStarted);
-            _ret += "\n";
-
-            if(this.PlayerAvailable && this.PlayerStarted)
-            {
-                _ret += "- Player run results:\n";
+                _ret += "Player run results:\n";
                 foreach (var s in this.PlayerResults)
-                    _ret += String.Format("-- {0}\n", s);
+                    _ret += String.Format("- {0}\n", s);
             }
             else
             {
-
-                if(this.DoApplicationStartAfterCheck | this.DoApplicationStartBeforeCheck)
+                if (!this.PlayerAvailable)
                 {
-                    _ret += "- IRTlibPlayer run results missing\n";
+                    _ret += "The Player could not be found\n";
 
                 }
                 else
                 {
-                    _ret += "- The IRTlibPlayer was not configured to run\n";
+                    _ret += "The Player was not started although it should be\n";
                 }
             }
-            _ret += "\n";
-
-            _ret += this.OverallResult;
-
-            _ret += "\n";
-
-            _ret += "EOF.";
 
             return _ret;
+
         }
 
         public string getDotNetFrameworkVersion(bool lookForVersionsBeforeVersion45 = false)
