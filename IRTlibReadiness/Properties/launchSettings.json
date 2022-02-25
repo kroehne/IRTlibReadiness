@@ -2,7 +2,7 @@
   "profiles": {
     "ReadinessTool": {
       "commandName": "Project",
-      "commandLineArgs": "ReadinessStartPlayer=\"startafter\" ReadinessCheckScope=\"normal\" AutoLoginUserName=\"abc123\" RawDataFolder=\"..\\out\" MonitoringFile=\"..\\out\\abc123.json\" AutoLoginCreateWithTest=\"Dummy\" Debug=\"true\"",
+      "commandLineArgs": "ReadinessStartPlayer=\"startafter\" ReadinessCheckScope=\"diagnose\" AutoLoginUserName=\"abc123\" RawDataFolder=\"..\\out\" MonitoringFile=\"..\\out\\abc123.json\" AutoLoginCreateWithTest=\"Dummy\" Debug=\"true\"",
       "workingDirectory": "C:\\pj\\IRTreadinessTool\\workspace"
     }
   }

@@ -53,9 +53,9 @@ namespace ReadinessTool
 
             bool checkScopeDiagnose = false;
 
-            string checkInfo = "";
+            //string checkInfo = "";
             CheckValue checkValue = null;
-            CheckResult checkResult = null;
+            //CheckResult checkResult = null;
             ParameterValue parameterValue = null;
 
             string strAssemblyPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
@@ -428,7 +428,8 @@ namespace ReadinessTool
 
                     if(type != null)
                     {
-                        ReadinessCheck readinessCheck = (ReadinessCheck)Activator.CreateInstance(type);
+                        ReadinessCheck readinessCheck = (ReadinessCheck)Activator.CreateInstance(type); //uses the parameterless constructor
+                        readinessCheck.SetCheckScope(checkScopeDiagnose);
                         txtLine = string.Format("Performing check: {0}... ", checkClassName);
                         ConsoleWrite(txtLine, ConsoleColor.Green, reportMode);
                         txtReportList.Add(txtLine);
@@ -462,7 +463,7 @@ namespace ReadinessTool
                     {
                         if (checkResults.OverallResult)
                         {
-                            txtLine = "The Player is available and will be started now.";
+                            txtLine = "The Player is available.";
                             ConsoleWriteLine(txtLine, ConsoleColor.Green, reportMode);
                             txtReportList.Add(txtLine + "\n");
                         }
@@ -768,7 +769,7 @@ namespace ReadinessTool
                         {
                             if (hitScore.ContainsKey(hitNames[hitCnt]))
                             {
-                                txtLine = string.Format("{0}\n{1}\n", hitTexts[hitCnt],": OK");
+                                txtLine = string.Format("{0}\n{1}", hitTexts[hitCnt],": OK");
                                 ConsoleWriteLine(txtLine, ConsoleColor.Green, reportMode);
                                 txtReportList.Add(txtLine);
                                 info.PlayerResults.Add(hitTexts[hitCnt] + ": OK");
@@ -780,7 +781,7 @@ namespace ReadinessTool
                         {
                             if (missScore.ContainsKey(missNames[missCnt]))
                             {
-                                txtLine = string.Format("{0}\n{1}\n", missTexts[missCnt], ": not OK");
+                                txtLine = string.Format("{0}\n{1}", missTexts[missCnt], ": not OK");
                                 ConsoleWriteLine(txtLine, ConsoleColor.Red, reportMode);
                                 txtReportList.Add(txtLine);
                                 info.PlayerResults.Add(missTexts[missCnt] + ": not OK");
@@ -800,7 +801,7 @@ namespace ReadinessTool
                                     {
                                         txtLine = "Question \"Kiosk Modus / ALt-Tab\" is not answered.";
                                         ConsoleWriteLine(txtLine, ConsoleColor.Red, reportMode);
-                                        txtReportList.Add(txtLine);
+                                        txtReportList.Add(txtLine + "\n");
                                         info.PlayerResults.Add(txtLine);
                                         suitable = false;
                                     }
@@ -813,7 +814,7 @@ namespace ReadinessTool
                                 {
                                     txtLine = "Question \"Kiosk Modus / Drag and Drop\" is not answered.";
                                     ConsoleWriteLine(txtLine, ConsoleColor.Red, reportMode);
-                                    txtReportList.Add(txtLine);
+                                    txtReportList.Add(txtLine + "\n");
                                     info.PlayerResults.Add(txtLine);
                                     suitable = false;
                                 }
@@ -829,7 +830,7 @@ namespace ReadinessTool
                                     {
                                         txtLine = "Question \"Audio\" is not answered.";
                                         ConsoleWriteLine(txtLine, ConsoleColor.Red, reportMode);
-                                        txtReportList.Add(txtLine);
+                                        txtReportList.Add(txtLine + "\n");
                                         info.PlayerResults.Add(txtLine);
                                         suitable = false;
                                     }
@@ -839,13 +840,16 @@ namespace ReadinessTool
                         if (libPlayerCheckList.Contains("TLMENU"))
                         {
                             //TL Menu (these answers are skipped if the page was left by using the TL Menu
-                            if (!Silent) Console.WriteLine("\nHint: The questions concerning the TL Menue are skipped if the Next button of the TL menu was clicked.\n");
+                            txtLine = "\nHint: The questions concerning the TL Menue are skipped if the Next button of the TL menu was clicked.\n";
+                            ConsoleWriteLine(txtLine, ConsoleColor.Gray, reportMode);
+                            txtReportList.Add(txtLine);
+
                             if (!hitScore.ContainsKey("hit.hit01_TLMENU"))
                                 if (!missScore.ContainsKey("miss.miss01_TLMENU"))
                                 {
                                     txtLine = "Question \"TL Menue / Open\" is not answered.";
-                                    ConsoleWriteLine(txtLine, ConsoleColor.Red, reportMode);
-                                    txtReportList.Add(txtLine);
+                                    ConsoleWriteLine(txtLine, ConsoleColor.DarkYellow, reportMode);
+                                    txtReportList.Add(txtLine + "\n");
                                     info.PlayerResults.Add(txtLine);
                                 }
 
@@ -855,8 +859,8 @@ namespace ReadinessTool
                                     if (!missScore.ContainsKey("miss.miss02_TLMENU"))
                                     {
                                         txtLine = "Question \"TL Menue / Audio adjustment\" is not answered.";
-                                        ConsoleWriteLine(txtLine, ConsoleColor.Red, reportMode);
-                                        txtReportList.Add(txtLine);
+                                        ConsoleWriteLine(txtLine, ConsoleColor.DarkYellow, reportMode);
+                                        txtReportList.Add(txtLine + "\n");
                                         info.PlayerResults.Add(txtLine);
                                     }
                             }
@@ -864,8 +868,8 @@ namespace ReadinessTool
                                 if (!missScore.ContainsKey("miss.miss03_TLMENU"))
                                 {
                                     txtLine = "Question \"TL Menue / Next button\" is not answered.";
-                                    ConsoleWriteLine(txtLine, ConsoleColor.Red, reportMode);
-                                    txtReportList.Add(txtLine);
+                                    ConsoleWriteLine(txtLine, ConsoleColor.DarkYellow, reportMode);
+                                    txtReportList.Add(txtLine + "\n");
                                     info.PlayerResults.Add(txtLine);
                                 }
                         }
