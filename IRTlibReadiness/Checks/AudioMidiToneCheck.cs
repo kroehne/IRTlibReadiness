@@ -51,5 +51,19 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if a midi tone can be played",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "-"
+            };
+
+            return checkValue;
+
+        }
     }
 }

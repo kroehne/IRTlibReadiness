@@ -8,7 +8,7 @@ namespace ReadinessTool
 {
     class AntiVirusSoftwareCheck : ReadinessCheck
     {
-        List<string> VirusDetails = null;
+        private List<string> VirusDetails = null;
         //const string className = "AntiVirusSoftwareCheck";
 
         public AntiVirusSoftwareCheck() : base(false, ReportMode.Info)
@@ -111,5 +111,21 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks for anti virus software",
+                OptionalCheck = true,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "-"
+            };
+            checkValue.ValidValues.Add(new ValidValue("AntiVirusSoftwareExpected", "true"));
+
+            return checkValue;
+
+        }
+
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 
@@ -86,6 +87,21 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+             CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if the user role is suitable",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "role"
+            };
+            checkValue.ValidValues.Add(new ValidValue("role", "Administrator"));
+            checkValue.ValidValues.Add(new ValidValue("role", "User"));
 
+            return checkValue;
+
+        }
     }
 }

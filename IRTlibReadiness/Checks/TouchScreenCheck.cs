@@ -51,6 +51,22 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if the device has a touch screen",
+                OptionalCheck = true,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "-"
+            };
+            checkValue.ValidValues.Add(new ValidValue("TouchScreenExpected", "false"));
+
+            return checkValue;
+
+        }
+
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern int GetSystemMetrics(int nIndex);

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace ReadinessTool
 {
@@ -10,7 +11,8 @@ namespace ReadinessTool
     
         public Dictionary<string, ParameterValue> Parameters { get; set; }
         public Dictionary<string, CheckValue> CheckRanges { get; set; }
-        public void SetDefaults(){
+        public void SetDefaults(List<ReadinessCheck> checkObjectList)
+        {
 
             #region Parameter
             //Parameters +
@@ -25,60 +27,72 @@ namespace ReadinessTool
             parameterKey = "ReadinessStartPlayer";
             if (!this.Parameters.ContainsKey(parameterKey))
             {
-                parameterValue = new ParameterValue();
-                parameterValue.PurposeInfo = "Determines if the Player should be started";
-                parameterValue.AllowedValuesInfo = new string[3] { "startbefore", "startafter", "nostart" };
-                parameterValue.Value = "startafter";
+                parameterValue = new ParameterValue
+                {
+                    PurposeInfo = "Determines if the Player should be started",
+                    AllowedValuesInfo = new string[3] { "startbefore", "startafter", "nostart" },
+                    Value = "startafter"
+                };
                 this.Parameters.Add(parameterKey, parameterValue);
             }
 
             parameterKey = "ReadinessMode";
             if (!this.Parameters.ContainsKey(parameterKey))
             {
-                parameterValue = new ParameterValue();
-                parameterValue.PurposeInfo = "Output of the Readiness tool";
-                parameterValue.AllowedValuesInfo = new string[3] { "silent", "normal", "verbose" };
-                parameterValue.Value = "normal";
+                parameterValue = new ParameterValue
+                {
+                    PurposeInfo = "Output of the Readiness tool",
+                    AllowedValuesInfo = new string[3] { "silent", "normal", "verbose" },
+                    Value = "normal"
+                };
                 this.Parameters.Add(parameterKey, parameterValue);
             }
 
             parameterKey = "ReadinessOutputFolder";
             if (!this.Parameters.ContainsKey(parameterKey))
             {
-                parameterValue = new ParameterValue();
-                parameterValue.PurposeInfo = "Output of the Readiness tool";
-                parameterValue.AllowedValuesInfo = new string[3] { "Folder name", "USERTEMPFOLDER", "keep empty for the app folder" };
-                parameterValue.Value = @"..\ReadinessToolOutput";
+                parameterValue = new ParameterValue
+                {
+                    PurposeInfo = "Output of the Readiness tool",
+                    AllowedValuesInfo = new string[3] { "Folder name", "USERTEMPFOLDER", "keep empty for the app folder" },
+                    Value = @"..\ReadinessToolOutput"
+                };
                 this.Parameters.Add(parameterKey, parameterValue);
             }
 
             parameterKey = "ReadinessCheckScope";
             if (!this.Parameters.ContainsKey(parameterKey))
             {
-                parameterValue = new ParameterValue();
-                parameterValue.PurposeInfo = "Scope of the Readiness tool checks";
-                parameterValue.AllowedValuesInfo = new string[2] { "normal", "diagnose" };
-                parameterValue.Value = "normal";
+                parameterValue = new ParameterValue
+                {
+                    PurposeInfo = "Scope of the Readiness tool checks",
+                    AllowedValuesInfo = new string[2] { "normal", "diagnose" },
+                    Value = "normal"
+                };
                 this.Parameters.Add(parameterKey, parameterValue);
             }
 
             parameterKey = "StudyName";
             if (!this.Parameters.ContainsKey(parameterKey))
             {
-                parameterValue = new ParameterValue();
-                parameterValue.PurposeInfo = "Name of the current study used for text output";
-                parameterValue.AllowedValuesInfo = new string[1] { "Character string" };
-                parameterValue.Value = "Study";
+                parameterValue = new ParameterValue
+                {
+                    PurposeInfo = "Name of the current study used for text output",
+                    AllowedValuesInfo = new string[1] { "Character string" },
+                    Value = "Study"
+                };
                 this.Parameters.Add(parameterKey, parameterValue);
             }
 
             parameterKey = "LibPlayerChecks";
             if (!this.Parameters.ContainsKey(parameterKey))
             {
-                parameterValue = new ParameterValue();
-                parameterValue.PurposeInfo = "List of checks performed by the IRTlibPlayer separated by \",\"";
-                parameterValue.AllowedValuesInfo = new string[6] { "KIOSK","TOUCH","AUDIO","TLMENU","AreaVisible","LinesVisible" };
-                parameterValue.Value = "KIOSK,TOUCH,AUDIO,TLMENU,AreaVisible,LinesVisible";
+                parameterValue = new ParameterValue
+                {
+                    PurposeInfo = "List of checks performed by the IRTlibPlayer separated by \",\"",
+                    AllowedValuesInfo = new string[6] { "KIOSK", "TOUCH", "AUDIO", "TLMENU", "AreaVisible", "LinesVisible" },
+                    Value = "KIOSK,TOUCH,AUDIO,TLMENU,AreaVisible,LinesVisible"
+                };
                 this.Parameters.Add(parameterKey, parameterValue);
             }
 
@@ -93,315 +107,17 @@ namespace ReadinessTool
             CheckValue checkValue = null;
             string checkValueKey = "";
 
-            checkValueKey = "OperatingSystemCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
+            foreach (ReadinessCheck rc in checkObjectList)
             {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if the operating system generally is suitable",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "operating system name"
-                };
-                checkValue.ValidValues.Add(new ValidValue("OS", "Windows 8"));
-                checkValue.ValidValues.Add(new ValidValue("OS", "Windows 10"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "OperatingSystem64bitCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if the operating system has 64bit architecture",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "Is64bit , true|false"
-                };
-                checkValue.ValidValues.Add(new ValidValue("Is64bit", "true"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "OperatingSystemTypeCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if the operating system is suitable",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "operating system property"
-                };
-                checkValue.ValidValues.Add(new ValidValue("64bitexpected", "true"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "UserRoleCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if the user role is suitable",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "role"
-                };
-                checkValue.ValidValues.Add(new ValidValue("role", "Administrator"));
-                checkValue.ValidValues.Add(new ValidValue("role", "User"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            //Memory checks+
-            checkValueKey = "MemoryInstalledCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if there is enough memory installed",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "GB"
-                };
-                checkValue.ValidValues.Add(new ValidValue("MinimalMemoryInstalled", "2"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "MemoryAvailableCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if there is enough memory available",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "GB"
-                };
-                checkValue.ValidValues.Add(new ValidValue("MinimalMemoryAvailable", "0,5"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-            //Memory checks-
-
-            checkValueKey = "TouchScreenCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if the device has a touch screen",
-                    OptionalCheck = true,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "-"
-                };
-                checkValue.ValidValues.Add(new ValidValue("TouchScreenExpected", "false"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "AntiVirusSoftwareCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks for anti virus software",
-                    OptionalCheck = true,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "-"
-                };
-                checkValue.ValidValues.Add(new ValidValue("AntiVirusSoftwareExpected", "true"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "ScreenResolutionCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if the horizontal screen resolution ist sufficient",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "Pixels"
-                };
-                checkValue.ValidValues.Add(new ValidValue("MinimalHorizontalRes", "1024"));
-                checkValue.ValidValues.Add(new ValidValue("MinimalVerticalRes", "768"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "NetworkConnectivityCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if the internet is reachable",
-                    OptionalCheck = true,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "-",
-                    CheckExec = CheckExecution.diagnoseMode
-                };
-                checkValue.ValidValues.Add(new ValidValue("WebClientURL", "http://www.google.com/"));
-                checkValue.ValidValues.Add(new ValidValue("WebClientURLaccessExpected", "true"));
-                checkValue.ValidValues.Add(new ValidValue("PingURL", "www.google.com"));
-                checkValue.ValidValues.Add(new ValidValue("PingURLaccessExpected", "true"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "RegistryKeyCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Registry check. Apply keys, vars and expected values or 'not set'",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "-"
-                };
-                checkValue.ValidValues.Add(new ValidValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation", "not set"));
-
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "PortRangeAvailableCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if the ports needed by the player are available. Specify a range of ports",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "port number"
-                };
-                checkValue.ValidValues.Add(new ValidValue("FirstPort", "8000"));
-                checkValue.ValidValues.Add(new ValidValue("LastPort", "8999"));
-                checkValue.ValidValues.Add(new ValidValue("MinimumPortsFree", "10"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "PortAvailableCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if the ports needed by the player are available. Specify a list of ports",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "port number"
-                };
-                checkValue.ValidValues.Add(new ValidValue("Port", "8000"));
-                checkValue.ValidValues.Add(new ValidValue("Port", "8001"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "FoldersWritableCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if a folder is writable.",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "Folder, <FolderName> or one of [USERTEMPFOLDER, ROOTDRIVE]"
-                };
-                checkValue.ValidValues.Add(new ValidValue("Folder", "USERTEMPFOLDER"));
-                checkValue.ValidValues.Add(new ValidValue("Folder", "ROOTDRIVE"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "FoldersFreeSpaceCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if a folder has sufficient free space",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "<FolderName> or one of [USERTEMPFOLDER, ROOTDRIVE], expected free space in MB"
-                };
-                checkValue.ValidValues.Add(new ValidValue("C:\\Users\\<USER>\\AppData\\Local\\Temp\\", "500"));
-                checkValue.ValidValues.Add(new ValidValue("C:\\", "1024"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "DriveSpeedCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks the data transfer speed",
-                    OptionalCheck = true,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "MB/s",
-                    CheckExec = CheckExecution.diagnoseMode
-                };
-                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedRead", "20"));
-                checkValue.ValidValues.Add(new ValidValue("MinimalSpeedWrite", "7"));
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "AudioMidiToneCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if a midi tone can be played",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "-"
-                };
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "AudioDevicesCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks if there are audio devices",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "-"
-                };
-                this.CheckRanges.TryAdd(checkValueKey, checkValue);
-            }
-
-            checkValueKey = "ExternalSoftwareCheck";
-            if (!this.CheckRanges.ContainsKey(checkValueKey))
-            {
-                checkValue = new CheckValue
-                {
-                    PurposeInfo = "Checks for external programs to exist",
-                    OptionalCheck = false,
-                    RunThisCheck = true,
-                    ValidValues = new List<ValidValue>(),
-                    UnitInfo = "Folder , Program file name",
-                    CheckExec = CheckExecution.conditional
-                };
-                checkValue.ValidValues.Add(new ValidValue("", "TestApp.Player.Chromely.exe"));
+                Type type = rc.GetType();
+                checkValue = rc.GetConfigurationDefault();
+                checkValueKey = type.Name;
                 this.CheckRanges.TryAdd(checkValueKey, checkValue);
             }
 
             //Check values -
             #endregion
-
         }
-
     }
 
     public class ParameterValue

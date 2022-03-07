@@ -103,5 +103,20 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Registry check. Apply keys, vars and expected values or 'not set'",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "-"
+            };
+            checkValue.ValidValues.Add(new ValidValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation", "not set"));
+
+            return checkValue;
+
+        }
     }
 }

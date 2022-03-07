@@ -6,7 +6,6 @@ namespace ReadinessTool
 {
     class MemoryInstalledCheck : ReadinessCheck
     {
-        const string className = "MemoryInstalledCheck";
 
         public MemoryInstalledCheck() : base(false, ReportMode.Info)
         {
@@ -62,6 +61,20 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if there is enough memory installed",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "GB"
+            };
+            checkValue.ValidValues.Add(new ValidValue("MinimalMemoryInstalled", "2"));
 
+            return checkValue;
+
+        }
     }
 }

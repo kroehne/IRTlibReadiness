@@ -31,5 +31,21 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks for external programs to exist",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "Folder , Program file name",
+                CheckExec = CheckExecution.conditional
+            };
+            checkValue.ValidValues.Add(new ValidValue("", "TestApp.Player.Chromely.exe"));
+
+            return checkValue;
+
+        }
     }
 }

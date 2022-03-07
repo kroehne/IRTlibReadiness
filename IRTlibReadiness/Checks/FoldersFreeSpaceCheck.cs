@@ -87,5 +87,21 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if a folder has sufficient free space",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "<FolderName> or one of [USERTEMPFOLDER, ROOTDRIVE], expected free space in MB"
+            };
+            checkValue.ValidValues.Add(new ValidValue("C:\\Users\\<USER>\\AppData\\Local\\Temp\\", "500"));
+            checkValue.ValidValues.Add(new ValidValue("C:\\", "1024"));
+
+            return checkValue;
+
+        }
     }
 }

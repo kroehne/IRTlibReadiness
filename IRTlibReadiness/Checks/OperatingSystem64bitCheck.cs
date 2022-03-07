@@ -51,5 +51,20 @@ namespace ReadinessTool
 
         }
 
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if the operating system has 64bit architecture",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "Is64bit , true|false"
+            };
+            checkValue.ValidValues.Add(new ValidValue("Is64bit", "true"));
+
+            return checkValue;
+
+        }
     }
 }

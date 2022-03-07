@@ -41,7 +41,7 @@ namespace ReadinessTool
 
             if (checkConfigurationOK)
             {
-                List<long> UsedPorts = getListOfUsedPorts();
+                List<long> UsedPorts = GetListOfUsedPorts();
                 checkResult.Result = ResultType.succeeded;
 
                 foreach (long _portToCheck in PortsToCheck)
@@ -71,8 +71,24 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if the ports needed by the player are available. Specify a list of ports",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "port number"
+            };
+            checkValue.ValidValues.Add(new ValidValue("Port", "8000"));
+            checkValue.ValidValues.Add(new ValidValue("Port", "8001"));
 
-        private List<long> getListOfUsedPorts()
+            return checkValue;
+
+        }
+
+        private List<long> GetListOfUsedPorts()
         {
             List<long> UsedPorts = new List<long>();
 

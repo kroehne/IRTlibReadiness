@@ -6,7 +6,6 @@ namespace ReadinessTool
 {
     class MemoryAvailableCheck : ReadinessCheck
     {
-        const string className = "MemoryAvailableCheck";
 
         public MemoryAvailableCheck() : base(false, ReportMode.Info)
         {
@@ -59,5 +58,21 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if there is enough memory available",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "GB"
+            };
+            checkValue.ValidValues.Add(new ValidValue("MinimalMemoryAvailable", "0,5"));
+
+            return checkValue;
+
+        }
+
     }
 }

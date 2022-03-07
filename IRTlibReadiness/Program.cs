@@ -23,14 +23,12 @@ using System.Reflection;
 namespace ReadinessTool
 {
 
-    enum ReportMode { Silent, Error, Info, Verbose };
+    public enum ReportMode { Silent, Error, Info, Verbose };
 
     class Program
     { 
         static void Main(string[] args)
         {
-            bool Silent = false;
-            bool Verbose = false;
 
             ReportMode reportMode = ReportMode.Info;
 
@@ -39,7 +37,7 @@ namespace ReadinessTool
             string txtLine = "";
 
             //WMI calls may throw an exception
-            bool WMIexceptionOccurred = false;
+            //bool WMIexceptionOccurred = false;
 
             List<string> RegistryKeys = new List<string>() { @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\;DisableLockWorkstation" };
 
@@ -49,13 +47,14 @@ namespace ReadinessTool
             DateTime playerInitStartTime = playerStartTime;
             string playerWindowTitle = "DIPF TestApp Standalone";
 
+            //get the list of implemented check classes
+            Object[] ca = { };
+            List<ReadinessCheck> checkObjectList = (List<ReadinessCheck>)ReflectiveEnumerator.GetEnumerableOfType<ReadinessCheck>(ca);
+    
             #region ConfigurationData
 
             bool checkScopeDiagnose = false;
-
-            //string checkInfo = "";
             CheckValue checkValue = null;
-            //CheckResult checkResult = null;
             ParameterValue parameterValue = null;
 
             string strAssemblyPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
@@ -87,7 +86,7 @@ namespace ReadinessTool
             if (!File.Exists(configFilePathYaml))
             {
                 //no config file so set the defaults and create a config file
-                configurationMap.SetDefaults();
+                configurationMap.SetDefaults(checkObjectList);
 
                 StringBuilder sb = new StringBuilder();
                 StringWriter writer = new StringWriter(sb);
@@ -156,14 +155,9 @@ namespace ReadinessTool
             }
             if (configurationMap.Parameters.TryGetValue("ReadinessMode", out parameterValue))
             {
-                Silent = parameterValue.Value.ToLower() == "silent";
-                Verbose = parameterValue.Value.ToLower() == "verbose";
+                if(parameterValue.Value.ToLower() == "silent") reportMode = ReportMode.Silent;
+                if(parameterValue.Value.ToLower() == "verbose") reportMode = ReportMode.Verbose;
                 //otherwise both values are false (default setting "normal")
-
-                // in the future enum ReportMode should be used, default is ReportMode.Info
-                if (Silent) reportMode = ReportMode.Silent;
-                if (Verbose) reportMode = ReportMode.Verbose;
-
             }
 
             if (configurationMap.Parameters.TryGetValue("ReadinessOutputFolder", out parameterValue))
@@ -261,13 +255,11 @@ namespace ReadinessTool
                     {
                         if (Configuration["ReadinessMode"].ToString().ToLower() == "silent")
                         {
-                            Silent = true;
-                            Verbose = false;
+                            reportMode = ReportMode.Silent;
                         } 
                         else if (Configuration["ReadinessMode"].ToString().ToLower() == "verbose")
                         {
-                            Silent = false;
-                            Verbose = true;
+                            reportMode = ReportMode.Verbose;
                         }
                     }
 
@@ -313,6 +305,18 @@ namespace ReadinessTool
                 ConsoleWriteLine(txtLine, ConsoleColor.Gray, reportMode);
                 txtReportList.Add(txtLine);
 
+                if(reportMode > ReportMode.Info)
+                {
+                    Console.ForegroundColor = ConsoleColor.Gray;
+                    Console.WriteLine("Implemented check classes :");
+                    foreach (ReadinessCheck rc in checkObjectList)
+                    {
+                        Type type = rc.GetType();
+                        Console.WriteLine(type.FullName);
+                    }
+                    Console.ResetColor();
+                }
+
                 #endregion
 
                 #region START PLAYER BEFORE 
@@ -325,7 +329,7 @@ namespace ReadinessTool
 
                     if (File.Exists(Path.Combine(info.AppFolder, info.AppName)))
                     {
-                        if (!Silent) Console.WriteLine("The Player will now be started...");
+                        ConsoleWriteLine("The Player will now be started...", ConsoleColor.DarkGray, reportMode);
                         try
                         {
                             var process = new Process
@@ -430,6 +434,7 @@ namespace ReadinessTool
                     {
                         ReadinessCheck readinessCheck = (ReadinessCheck)Activator.CreateInstance(type); //uses the parameterless constructor
                         readinessCheck.SetCheckScope(checkScopeDiagnose);
+                        readinessCheck.SetReportMode(reportMode);
                         txtLine = string.Format("Performing check: {0}... ", checkClassName);
                         ConsoleWrite(txtLine, ConsoleColor.Green, reportMode);
                         txtReportList.Add(txtLine);
@@ -578,7 +583,7 @@ namespace ReadinessTool
                                 //looking for a file written after the player was started
                                 if (file.CreationTime > playerStartTime)
                                 {
-                                    if (!Silent) Console.WriteLine("Player output file is: " + file.FullName);
+                                    ConsoleWriteLine("Player output file is: " + file.FullName, ConsoleColor.Gray, reportMode);
                                     playerOutputZipFile = file.FullName;
                                     break;
                                 }
@@ -616,7 +621,7 @@ namespace ReadinessTool
                         }
                         else
                         {
-                            if (!Silent) Console.WriteLine("Player output folder not found: " + strPlayerResultPath);
+                            ConsoleWriteLine("Player output folder not found: " + strPlayerResultPath, ConsoleColor.Red, reportMode);
                             //the player output folder doesn't exist
                         }
 
@@ -692,51 +697,36 @@ namespace ReadinessTool
                 txtLine= string.Format("\n{0}\n{1}{2}\n{3}\n", starLine, "* ReadinessTool results. The overall check result is ", checkResults.OverallResult, starLine);
                 ConsoleWriteLine(txtLine, ConsoleColor.Gray, reportMode);
                 txtReportList.Add(txtLine);
-                /*
-                Console.ForegroundColor = ConsoleColor.Gray;
-                Console.WriteLine(" ");
-                Console.WriteLine("********************************************************************************");
-
-                Console.Write("* ReadinessTool results. The overall check result is ");
-                if (checkResults.OverallResult)
-                    ConsoleWriteLine(string.Format("{0}", checkResults.OverallResult), ConsoleColor.Green, reportMode);
-
-                else
-                    ConsoleWriteLine(string.Format("{0}", checkResults.OverallResult), ConsoleColor.Red, reportMode);
-
-                Console.WriteLine("********************************************************************************");
-                Console.WriteLine(" ");
-                Console.ResetColor();
-                */
 
                 CheckValue currentValue;
                 string optionalCheck = "";
+                ConsoleColor consoleColor = ConsoleColor.Green;
 
                 foreach (KeyValuePair<string, CheckResult> entry in checkResults.CheckResultMap)
                 {
                     optionalCheck = "";
-                    if (entry.Value.Result == ResultType.succeeded) 
-                        Console.ForegroundColor = ConsoleColor.Green;
+                    if (entry.Value.Result == ResultType.succeeded)
+                        consoleColor = ConsoleColor.Green;
                     if (entry.Value.Result == ResultType.failed) { 
                         //Console.ForegroundColor = ConsoleColor.Red;
                         if(configurationMap.CheckRanges.TryGetValue(entry.Key, out currentValue))
                         {   //do not set the overall result to false if this is a optional check
                             if (!currentValue.OptionalCheck)
                             {
-                                Console.ForegroundColor = ConsoleColor.Red;
+                                consoleColor = ConsoleColor.Red;
                                 suitable = false;
                             }
                             else
                             {
-                                Console.ForegroundColor = ConsoleColor.DarkYellow;
+                                consoleColor = ConsoleColor.DarkYellow;
                                 optionalCheck = " (optional check)";
                             }
                         }
                     }
-                    if (entry.Value.Result == ResultType.skipped) Console.ForegroundColor = ConsoleColor.Gray;
+                    if (entry.Value.Result == ResultType.skipped) consoleColor = ConsoleColor.Gray;
 
                     txtLine = string.Format("{0} - {1} Info: {2} {3}", entry.Value.Result, entry.Key, entry.Value.ResultInfo, optionalCheck);
-                    Console.WriteLine(txtLine);
+                    ConsoleWriteLine(txtLine, consoleColor, reportMode);
                     txtReportList.Add(txtLine + "\n");
                 }
                 Console.ResetColor();
@@ -989,7 +979,7 @@ namespace ReadinessTool
                 {
                     streamWriter.Write(writer.ToString());
                 }
-                if (!Silent) { Console.WriteLine("ReadinessTool results written to file " + resultFilePathYaml + "\n"); }
+                ConsoleWriteLine("ReadinessTool results written to file " + resultFilePathYaml + "\n", ConsoleColor.Gray, reportMode);
 
                 //write the results to a json file
                 resultFileNameJson = resultFileNameJson + currentTime + ".json";
@@ -997,7 +987,7 @@ namespace ReadinessTool
 
                 string jsonString = System.Text.Json.JsonSerializer.Serialize(checkResults);
                 File.WriteAllText(resultFilePathJson, jsonString);
-                if (!Silent) { Console.WriteLine("ReadinessTool results written to file " + resultFilePathJson + "\n"); }
+                ConsoleWriteLine("ReadinessTool results written to file " + resultFilePathJson + "\n", ConsoleColor.Gray, reportMode);
 
                 #endregion
 
@@ -1082,6 +1072,25 @@ namespace ReadinessTool
                 Console.WriteLine(outString);
                 Console.ResetColor();
             }
+        }
+    }
+
+    public static class ReflectiveEnumerator
+    {
+        static ReflectiveEnumerator() { }
+
+        //public static IEnumerable<T> GetEnumerableOfType<T>(params object[] constructorArgs) where T : class, IComparable<T>
+        public static IEnumerable<T> GetEnumerableOfType<T>(params object[] constructorArgs) where T : class
+        {
+            List<T> objects = new List<T>();
+            foreach (Type type in
+                Assembly.GetAssembly(typeof(T)).GetTypes()
+                .Where(myType => myType.IsClass && !myType.IsAbstract && myType.IsSubclassOf(typeof(T))))
+            {
+                objects.Add((T)Activator.CreateInstance(type, constructorArgs));
+            }
+            //objects.Sort();
+            return objects;
         }
     }
 

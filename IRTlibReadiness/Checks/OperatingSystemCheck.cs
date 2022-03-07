@@ -45,5 +45,21 @@ namespace ReadinessTool
 
         }
 
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if the operating system generally is suitable",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "operating system name"
+            };
+            checkValue.ValidValues.Add(new ValidValue("OS", "Windows 8"));
+            checkValue.ValidValues.Add(new ValidValue("OS", "Windows 10"));
+
+            return checkValue;
+
+        }
     }
 }

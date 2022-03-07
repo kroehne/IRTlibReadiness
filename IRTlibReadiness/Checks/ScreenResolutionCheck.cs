@@ -9,7 +9,7 @@ namespace ReadinessTool
         int minScreenResH = 0;
         int minScreenResV = 0;
 
-        List<string> MonitorDetails = new List<string>();
+        private List<string> MonitorDetails = new List<string>();
 
         public ScreenResolutionCheck() : base(false, ReportMode.Info)
         {
@@ -124,5 +124,22 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+             CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if the horizontal screen resolution ist sufficient",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "Pixels"
+            };
+            checkValue.ValidValues.Add(new ValidValue("MinimalHorizontalRes", "1024"));
+            checkValue.ValidValues.Add(new ValidValue("MinimalVerticalRes", "768"));
+
+            return checkValue;
+
+        }
+
     }
 }

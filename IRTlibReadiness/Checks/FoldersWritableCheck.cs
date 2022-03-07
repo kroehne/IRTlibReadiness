@@ -62,6 +62,22 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if a folder is writable.",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "Folder, <FolderName> or one of [USERTEMPFOLDER, ROOTDRIVE]"
+            };
+            checkValue.ValidValues.Add(new ValidValue("Folder", "USERTEMPFOLDER"));
+            checkValue.ValidValues.Add(new ValidValue("Folder", "ROOTDRIVE"));
+
+            return checkValue;
+
+        }
 
         private static bool HasWritePermissionOnDir(string path)
         {

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace ReadinessTool
 {
-    abstract class ReadinessCheck
+    public abstract class ReadinessCheck
     {
 
         public string className = "";
@@ -77,6 +77,12 @@ namespace ReadinessTool
         public virtual string GetPurposeString()
         {
             return purposeInfo;
+        }
+
+        public virtual CheckValue GetConfigurationDefault()
+        {
+            return new CheckValue();
+
         }
 
         public static bool CanExecute(CheckValue checkValue, bool checkScopeDiag)

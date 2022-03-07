@@ -38,6 +38,7 @@ namespace ReadinessTool
                     if (reportMode > ReportMode.Silent)
                     {
                         Console.ForegroundColor = ConsoleColor.DarkGray;
+                        Console.Write("\n");
                         Console.Write(" - Speed Test for file: {0}, Size: {1:0.00}Gb\n   Press ESC to break", bigTest.FilePath, (double)bigTest.FileSize / 1024 / 1024 / 1024);
                         Console.ResetColor();
                     }
@@ -217,6 +218,23 @@ namespace ReadinessTool
             resultString = String.Format("- Current user role: {0} \n", "");
 
             return resultString;
+
+        }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks the data transfer speed",
+                OptionalCheck = true,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "MB/s",
+                CheckExec = CheckExecution.diagnoseMode
+            };
+            checkValue.ValidValues.Add(new ValidValue("MinimalSpeedRead", "20"));
+            checkValue.ValidValues.Add(new ValidValue("MinimalSpeedWrite", "7"));
+
+            return checkValue;
 
         }
 

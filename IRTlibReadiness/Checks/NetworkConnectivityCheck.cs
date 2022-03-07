@@ -8,8 +8,6 @@ namespace ReadinessTool
 {
     class NetworkConnectivityCheck : ReadinessCheck
     {
-        ResultType PingCheckResult = ResultType.failed;
-        ResultType URLaccessCheckResult = ResultType.failed;
 
         public NetworkConnectivityCheck() : base(false, ReportMode.Info)
         {
@@ -122,5 +120,25 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if the internet is reachable",
+                OptionalCheck = true,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "-",
+                CheckExec = CheckExecution.diagnoseMode
+            };
+            checkValue.ValidValues.Add(new ValidValue("WebClientURL", "http://www.google.com/"));
+            checkValue.ValidValues.Add(new ValidValue("WebClientURLaccessExpected", "true"));
+            checkValue.ValidValues.Add(new ValidValue("PingURL", "www.google.com"));
+            checkValue.ValidValues.Add(new ValidValue("PingURLaccessExpected", "true"));
+
+            return checkValue;
+
+        }
+
     }
 }

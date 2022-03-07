@@ -76,6 +76,24 @@ namespace ReadinessTool
             return resultString;
 
         }
+        public override CheckValue GetConfigurationDefault()
+        {
+            CheckValue checkValue = new CheckValue
+            {
+                PurposeInfo = "Checks if the ports needed by the player are available. Specify a range of ports",
+                OptionalCheck = false,
+                RunThisCheck = true,
+                ValidValues = new List<ValidValue>(),
+                UnitInfo = "port number"
+            };
+            checkValue.ValidValues.Add(new ValidValue("FirstPort", "8000"));
+            checkValue.ValidValues.Add(new ValidValue("LastPort", "8999"));
+            checkValue.ValidValues.Add(new ValidValue("MinimumPortsFree", "10"));
+
+            return checkValue;
+
+        }
+
 
         private List<long> GetListOfUsedPorts()
         {
