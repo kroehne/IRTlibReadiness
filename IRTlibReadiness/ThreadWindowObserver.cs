@@ -20,7 +20,7 @@ namespace ReadinessTool
         private string windowToWatchFor;
         private Process process;
         private int threadWaitTime = 2000; //ms
-        private int threadWaitTimeMultiplier = 30; // 1 minute
+        private int threadWaitTimeMultiplier = 90; // 3 minutes
         private bool dbg = false;
 
         // The constructor obtains the state information.
@@ -49,7 +49,9 @@ namespace ReadinessTool
                 activeWin = GetActiveWindowTitle();
                 waitCnt++;
                 if (dbg) Console.WriteLine("Thread: waiting counter is " + waitCnt + ", active window is " + activeWin);
+                Console.Write(".");
             }
+            Console.WriteLine("*");
 
             if (dbg) Console.WriteLine("Thread: active window is \"" + activeWin + "\"");
 

@@ -26,7 +26,11 @@ namespace ReadinessTool
     public enum ReportMode { Silent, Error, Info, Verbose };
 
     class Program
-    { 
+    {
+
+        [DllImport("user32.dll")]
+        static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
         static void Main(string[] args)
         {
 
@@ -340,7 +344,7 @@ namespace ReadinessTool
                                     Arguments = string.Join(" ", args),
                                     UseShellExecute = false,
                                     RedirectStandardOutput = false,
-                                    CreateNoWindow = true
+                                    CreateNoWindow = false
                                 }
                             };
 
@@ -507,7 +511,7 @@ namespace ReadinessTool
                                         Arguments = string.Join(" ", args),
                                         UseShellExecute = false,
                                         RedirectStandardOutput = false,
-                                        CreateNoWindow = true
+                                        CreateNoWindow = false
                                     }
                                 };
 
@@ -519,8 +523,18 @@ namespace ReadinessTool
                                 Thread t = new Thread(new ThreadStart(two.ThreadProc));
                                 t.Start();
 
+                                // the ReadinessTool Pid
+                                if(debug) Console.WriteLine("Pid: " + Process.GetCurrentProcess().Id);
+                                // the cmd window's Pid
+                                Process cmdWinProcess = Process.GetProcessById(Process.GetCurrentProcess().Id).Parent();
+                                if(debug) Console.WriteLine("ParentPid: " + cmdWinProcess.Id);
+                                // the handle of the cmd window
+                                IntPtr handle = cmdWinProcess.MainWindowHandle;
+
                                 if (process.Start())
                                 {
+                                    ShowWindow(handle, 4); // set the cmd window not active (otherwise it will stay in front of the player)
+
                                     //remember the time when the player is started
                                     playerStartTime = DateTime.Now;
                                     info.PlayerStarted = true;
@@ -533,6 +547,8 @@ namespace ReadinessTool
                                 }
                                 */
                                 process.WaitForExit();
+
+                                ShowWindow(handle, 1); // show in normal size and activate the cmd window
 
                             }
                             catch (Exception e)
@@ -759,7 +775,7 @@ namespace ReadinessTool
                         {
                             if (hitScore.ContainsKey(hitNames[hitCnt]))
                             {
-                                txtLine = string.Format("{0}\n{1}", hitTexts[hitCnt],": OK");
+                                txtLine = string.Format("{0}{1}\n", hitTexts[hitCnt],": OK");
                                 ConsoleWriteLine(txtLine, ConsoleColor.Green, reportMode);
                                 txtReportList.Add(txtLine);
                                 info.PlayerResults.Add(hitTexts[hitCnt] + ": OK");
@@ -771,7 +787,7 @@ namespace ReadinessTool
                         {
                             if (missScore.ContainsKey(missNames[missCnt]))
                             {
-                                txtLine = string.Format("{0}\n{1}", missTexts[missCnt], ": not OK");
+                                txtLine = string.Format("{0}{1}\n", missTexts[missCnt], ": not OK");
                                 ConsoleWriteLine(txtLine, ConsoleColor.Red, reportMode);
                                 txtReportList.Add(txtLine);
                                 info.PlayerResults.Add(missTexts[missCnt] + ": not OK");
@@ -1214,6 +1230,39 @@ namespace ReadinessTool
         public int dmReserved2;
         public int dmPanningWidth;
         public int dmPanningHeight;
+    }
+
+    public static class ProcessExtensions
+    {
+        private static string FindIndexedProcessName(int pid)
+        {
+            var processName = Process.GetProcessById(pid).ProcessName;
+            var processesByName = Process.GetProcessesByName(processName);
+            string processIndexdName = null;
+
+            for (var index = 0; index < processesByName.Length; index++)
+            {
+                processIndexdName = index == 0 ? processName : processName + "#" + index;
+                var processId = new PerformanceCounter("Process", "ID Process", processIndexdName);
+                if ((int)processId.NextValue() == pid)
+                {
+                    return processIndexdName;
+                }
+            }
+
+            return processIndexdName;
+        }
+
+        private static Process FindPidFromIndexedProcessName(string indexedProcessName)
+        {
+            var parentId = new PerformanceCounter("Process", "Creating Process ID", indexedProcessName);
+            return Process.GetProcessById((int)parentId.NextValue());
+        }
+
+        public static Process Parent(this Process process)
+        {
+            return FindPidFromIndexedProcessName(FindIndexedProcessName(process.Id));
+        }
     }
 
 }
